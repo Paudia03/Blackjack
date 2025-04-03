@@ -9,12 +9,11 @@ export default defineConfig({
   ],
   server: {
     proxy: {
-      // Reindirizza tutte le richieste che iniziano per /api al backend
       '/api': {
         target: 'http://localhost:3000',
         changeOrigin: true,
         secure: false,
-        rewrite: (path) => path.replace(/^\/api/, '')
+        // Rimuovi la funzione rewrite per mantenere il prefisso /api
       }
     }
   }
