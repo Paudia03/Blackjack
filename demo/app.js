@@ -31,9 +31,9 @@ let player_bet = 0;
 deck = CreateDeck();
 shuffled = ShuffleDeck(deck);
 
-app.post("/api/bet", (req, res) => {
-    const { bet } = req.body;
 
+app.post("/api/blackjack/start", (req, res) => {
+    const { bet } = req.body;
     if (!bet || bet <= 0) {
         return res.status(400).json({ message: "La puntata deve essere maggiore di 0!" });
     }
@@ -41,61 +41,53 @@ app.post("/api/bet", (req, res) => {
     if (bet > balance) {
         return res.status(400).json({ message: "Saldo insufficiente!" });
     }
+    else {
+        player_bet = bet;
+        balance -= bet;
+        dealer_cards = [];
+        player_cards = []; 
+        dealer_card = shuffled.shift();
+        player_card = shuffled.shift();
+        dealer_second_card = shuffled.shift();
+        player_second_card = shuffled.shift();
+        dealer_cards.push(dealer_card);
+        dealer_cards.push(dealer_second_card);
+        player_cards.push(player_card);
+        player_cards.push(player_second_card);
+        dealer_blackjack=false;
+        player_blackjack=false;
 
-    player_bet = bet;
-    balance -= bet;
 
-    return res.json({
-        message: `Hai puntato ${bet}!`,
-        balance: balance,
-        bet: player_bet
-    });
-});
+        const dealer_first_value = Value(dealer_card);
+        const player_first_value = Value(player_card);
+        const dealer_second_value = Value(dealer_second_card);
+        const player_second_value = Value(player_second_card);
 
-app.get("/api/start", (req, res) => {
-    if (player_bet == 0) {
-        return res.status(400).json({ message: "Devi piazzare una puntata prima di iniziare!" });
+        player_score = player_first_value + player_second_value;
+        dealer_score = dealer_first_value + dealer_second_value;
+
+        res.json({
+            your_bet: player_bet,
+            your_balance: balance,
+            dealer_card: dealer_card, 
+            player_card: player_card, 
+            player_second_card: player_second_card,
+            your_score: player_score
+        });
+
+        console.log(`Remaining cards: ${shuffled.length}`);
+        console.log(`Dealer's first card: ${JSON.stringify(dealer_card)}`);
+        console.log(`Dealer's second card: ${JSON.stringify(dealer_second_card)}`);
+        console.log(`Dealer score: ${dealer_score}`);
     }
-    dealer_cards = [];
-    player_cards = []; 
-    dealer_card = shuffled.shift();
-    player_card = shuffled.shift();
-    dealer_second_card = shuffled.shift();
-    player_second_card = shuffled.shift();
-    dealer_cards.push(dealer_card);
-    dealer_cards.push(dealer_second_card);
-    player_cards.push(player_card);
-    player_cards.push(player_second_card);
-    dealer_blackjack=false;
-    player_blackjack=false;
-
-
-    const dealer_first_value = Value(dealer_card);
-    const player_first_value = Value(player_card);
-    const dealer_second_value = Value(dealer_second_card);
-    const player_second_value = Value(player_second_card);
-
-    player_score = player_first_value + player_second_value;
-    dealer_score = dealer_first_value + dealer_second_value;
-
-    res.json({
-        dealer_card: dealer_card, 
-        player_card: player_card, 
-        player_second_card: player_second_card,
-        your_score: player_score
-    });
-
-    console.log(`Remaining cards: ${shuffled.length}`);
-    console.log(`Dealer's first card: ${JSON.stringify(dealer_card)}`);
-    console.log(`Dealer's second card: ${JSON.stringify(dealer_second_card)}`);
-    console.log(`Dealer score: ${dealer_score}`);
+    
 });
 
-app.post("/api/play", (req, res) => {
+app.post("/api/blackjack/play", (req, res) => {
     const { action } = req.body; 
 
     switch(action) {
-        case 0:
+        case 'stand':
             const responseData = {
                 message: "",
                 dealer_cards: dealer_cards,
@@ -118,11 +110,18 @@ app.post("/api/play", (req, res) => {
                     if (dealer_cards.length == 2){
                         dealer_blackjack=true;
                     }
+                }
+                
+                if (player_score == 21){
+                    if (player_cards.length == 2){
+                        player_blackjack =true;
+                    }
                 } 
 
                 if (dealer_score > 21) {
                     responseData.message = "Dealer's score exceeded 21. You Won!";
                     responseData.dealer_score = dealer_score;
+                    responseData.remaining_cards = shuffled.length;
                     return res.json(responseData);
                 }
             }
@@ -130,24 +129,30 @@ app.post("/api/play", (req, res) => {
             switch (result) {
                 case 1:
                     responseData.message = "You Won!";
-                    console.log(player_bet);
-                    balance += Payment(player_bet, player_blackjack)
+                    let payout = Payment(player_bet, player_blackjack); 
+                    console.log(`Pagamento dovuto: ${payout}`); // DEBUG
+                    balance += payout;
+                    responseData.your_balance = balance;
+                    console.log(`Nuovo balance: ${balance}`); // DEBUG
                     break;
                 case 2:
                     responseData.message = "Tie!";
                     balance += player_bet;
+                    responseData.your_balance = balance;
                     break;
                 case 3:
                     responseData.message = "You Lost!";
+                    responseData.your_balance = balance;
                     break;
                 default:
                     responseData.message = "Unexpected result";
             }
             console.log(`Remaining cards: ${shuffled.length}`);
-            responseData.your_balance = balance;
+            responseData.dealer_score = dealer_score;
+            responseData.remaining_cards = shuffled.length;
             return res.json(responseData);
 
-        case 1:
+        case 'hit':
             if (player_score <= 21) {
                 player_next_card = shuffled.shift();
                 player_cards.push(player_next_card); 
@@ -158,11 +163,6 @@ app.post("/api/play", (req, res) => {
                         player_score -= 10;  
                     }
                 }
-                if (player_score == 21){
-                    if (player_cards.length == 2){
-                        player_blackjack =true;
-                    }
-                } 
                 
                 if (player_score > 21) {
                     
@@ -206,7 +206,7 @@ app.post("/api/data", (req, res) => {
     }
 });
 
-app.post("/api/reset", (req, res) => {
+app.post("/api/blackjack/reset", (req, res) => {
     deck = [];
     shuffled = [];
     dealer_card = null;
