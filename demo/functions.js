@@ -59,25 +59,20 @@ export function Dealer_check(val){
     else return false;
 }
 
-export function Win(yourscore, dealerscore, yourblackjack, dealerblackjack){
-    if (yourscore<=21 && dealerscore<=21) {
-        if (yourscore>dealerscore){
-            return 1;
-        }
-        else if (yourscore == dealerscore){
-            if (yourblackjack == true && dealerblackjack==false) {
-                return 1;
-            }
-            else if (yourblackjack == false && dealerblackjack==true){
-                return 3;
-            }
-            else return 2;
-        }
-        else return 3;
-    }
-    else if (yourscore>=21) return 3;
-    else if (dealerscore>=21) return 1;
+export function Win(yourscore, dealerscore, yourblackjack, dealerblackjack) {
+    if (yourblackjack && !dealerblackjack) return 1; 
+    if (!yourblackjack && dealerblackjack) return 3;
+    if (yourblackjack && dealerblackjack) return 2;  
+
+    if (yourscore > 21) return 3; 
+    if (dealerscore > 21) return 1; 
+
+    if (yourscore > dealerscore && yourscore < 21) return 1;
+    if (yourscore < dealerscore && dealerscore < 21) return 3;
+    
+    return 2; 
 }
+
 
 export function Payment(bet, blackjack){
     if (blackjack == true){
