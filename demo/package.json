@@ -4,16 +4,19 @@
   "main": "app.js",
   "type": "module",
   "scripts": {
-    "dev": "nodemon demo/app.js"
+     "dev": "nodemon Blackjack/demo/app.js"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "concurrently": "^9.1.2",
     "cors": "^2.8.5",
     "express": "^4.21.2",
     "morgan": "^1.10.0",
+    "mysql": "^2.18.1",
+    "mysql2": "^3.14.1",
     "nodemon": "^3.1.9"
   }
 }

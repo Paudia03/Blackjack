@@ -2,6 +2,7 @@ import express, { json } from "express";
 import cors from "cors";
 import morgan from "morgan";
 import { TestDeck, CreateDeck, ShuffleDeck, Value, Dealer_check, Win, Payment, Splitchecker } from './functions.js';
+import connection from "./db_connection.js";
 
 const PORT = 3000;
 const app = express();
