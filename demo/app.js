@@ -112,9 +112,26 @@ app.post("/api/blackjack/start", (req, res) => {
         const player_second_value = Value(player_second_card);
         player_score = player_first_value + player_second_value;
         dealer_score = dealer_first_value + dealer_second_value;
-
-        updateResponseData();
-        return res.json(responseData);
+        player_blackjack = (player_score === 21);
+        dealer_blackjack = (dealer_score === 21);
+        if (player_blackjack || dealer_blackjack) {
+           GameOver = true;
+           if (player_blackjack && !dealer_blackjack) {
+                balance += Payment(player_bet, true);
+                responseData.message = "Blackjack! You won!";
+                GameOver == true;
+            } else if (!player_blackjack && dealer_blackjack) {
+                responseData.message = "Blackjack dealer! You lost";
+                GameOver == true;
+            } else {
+                // Entrambi blackjack → pareggio
+               balance += player_bet;
+               responseData.message = "Both Blackjack. Tie.";
+               GameOver == true;
+            }
+            updateResponseData();
+            return res.json(responseData);
+        }
     } else {
         return res.status(400).json({ message: "No more cards in the deck." });
     }

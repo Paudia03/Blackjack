@@ -14,5 +14,6 @@ connection.connect((err) => {
   }
   console.log('DB connection was successful!');
 });
+//prova
 
 export default connection;
