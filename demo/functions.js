@@ -1,12 +1,3 @@
-export function Bet(res) {
-    console.log("Client asked to bet");
-    res.json({ message: "You asked to bet" });
-}
-
-export function Split(res) {
-    console.log("Client asked to split");
-    res.json({ message: "You asked to split" });
-}
 
 export function CreateDeck() {
     const suits = ['Hearts', 'Clubs', 'Diamonds', 'Spades']; 
@@ -120,6 +111,16 @@ export function Payment(bet, blackjack){
         return bet * 2;
     }
 }
+
+export function adjustForAces(hand, score) {
+    let aces = hand.filter(card => card.value === "A").length;
+    while (score > 21 && aces > 0) {
+      score -= 10;
+      aces--;
+    }
+    return score;
+  }
+  
 
 export function Splitchecker(card, card_2){
     if (card.value == card_2.value) {

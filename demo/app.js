@@ -1,8 +1,10 @@
 import express, { json } from "express";
 import cors from "cors";
 import morgan from "morgan";
-import { TestDeck, CreateDeck, ShuffleDeck, Value, Dealer_check, Win, Payment, Splitchecker } from './functions.js';
+import { TestDeck, CreateDeck, ShuffleDeck, Value, Dealer_check, Win, Payment, Splitchecker, adjustForAces } from './functions.js';
 import connection from "./db_connection.js";
+import crypto from 'crypto';
+import validator from "validator";
 
 const PORT = 3000;
 const app = express();
@@ -38,10 +40,21 @@ let current_split = 1;
 let isSplit = false;
 let dealer_first_value = 0;
 
-//deck = CreateDeck(); 
-//shuffled = ShuffleDeck(deck);
+deck = CreateDeck();
+shuffled = ShuffleDeck(deck);
+// shuffled = TestDeck(); // usare SOLO per test
 
-shuffled = TestDeck(); // usare SOLO per test.
+function generateShortID() {
+    return crypto.randomBytes(8).toString('hex');
+  }
+
+function checkAndReshuffleDeck() {
+    if (shuffled.length < 10) {
+        deck = CreateDeck();
+        shuffled = ShuffleDeck(deck);
+        console.log("Deck reshuffled automatically.");
+    }
+}
 
 let responseData = {
     message: "",
@@ -65,7 +78,7 @@ let responseData = {
 
 function updateResponseData() {
     responseData.remaining_cards = shuffled.length;
-    responseData.dealer_first_card_value = Value(dealer_card);
+    responseData.dealer_first_card_value = dealer_cards.length > 0 ? Value(dealer_cards[0]) : 0;
     responseData.dealer_score = dealer_score;
     responseData.player_score = player_score;
     responseData.your_balance = balance;
@@ -81,15 +94,60 @@ function updateResponseData() {
     responseData.player_blackjack = player_blackjack;
 }
 
+app.post("/api/blackjack/signup", (req, res) => {
+    const {email, username, password, repeat_password } = req.body;
+
+    if (!validator.isEmail(email)) {
+        return res.status(400).json({ 
+            success: false, 
+            message: "Invalid email format." 
+        });
+    }
+
+    if (password !== repeat_password) {
+        return res.status(400).json({ 
+            success: false, 
+            message: "The two passwords don't match." 
+        });
+    }
+
+    const userId = generateShortID();
+    const sql = "INSERT INTO user (user_id, username, password, wallet, games_won, games_played, email) VALUES (?, ?, ?, ?, ?, ?, ?)";
+
+    connection.query(sql, [userId, username, password, 0, 0, 0, email], (err) => {
+        if (err) {
+            console.error(err); 
+            return res.status(500).json({ 
+                success: false, 
+                message: "Database error. User could not be created." 
+            });
+        }
+
+        return res.status(201).json({ 
+            success: true,
+            message: "User created successfully.",
+            user: {
+                id: userId,
+                username: username,
+                email: email
+            }
+        });
+    });
+});
+
+
+app.post("/api/blackjack/login", (req, res) => {
+
+});
+
 app.post("/api/blackjack/start", (req, res) => {
+    checkAndReshuffleDeck();
     const { bet } = req.body;
-    if (!bet || bet <= 0) {
-        return res.status(400).json({ message: "La puntata deve essere maggiore di 0!" });
-    }
-    if (bet > balance) {
-        return res.status(400).json({ message: "Saldo insufficiente!" });
-    }
-    if (shuffled.length >= 4) {
+    if (!bet || bet <= 0) return res.status(400).json({ message: "Place a bet before starting" });
+    if (bet > balance) return res.status(400).json({ message: "Not enough money!" });
+
+    if (GameOver) {
+        Split_action = false;
         GameOver = false;
         player_bet = bet;
         balance -= bet;
@@ -115,29 +173,29 @@ app.post("/api/blackjack/start", (req, res) => {
         player_blackjack = (player_score === 21);
         dealer_blackjack = (dealer_score === 21);
         if (player_blackjack || dealer_blackjack) {
-           GameOver = true;
-           if (player_blackjack && !dealer_blackjack) {
+            if (player_blackjack && !dealer_blackjack) {
                 balance += Payment(player_bet, true);
                 responseData.message = "Blackjack! You won!";
-                GameOver == true;
             } else if (!player_blackjack && dealer_blackjack) {
                 responseData.message = "Blackjack dealer! You lost";
-                GameOver == true;
             } else {
-                // Entrambi blackjack → pareggio
-               balance += player_bet;
-               responseData.message = "Both Blackjack. Tie.";
-               GameOver == true;
+                balance += player_bet;
+                responseData.message = "Both Blackjack. Tie.";
             }
             updateResponseData();
             return res.json(responseData);
         }
     } else {
-        return res.status(400).json({ message: "No more cards in the deck." });
+        return res.status(400).json({ message: "Finish this hand" });
     }
+
+    responseData.message = "Game started";
+    updateResponseData();
+    return res.json(responseData);
 });
 
 app.post("/api/blackjack/play", (req, res) => {
+    checkAndReshuffleDeck();
     const { action } = req.body;
 
     switch (action) {
@@ -148,15 +206,12 @@ app.post("/api/blackjack/play", (req, res) => {
                     updateResponseData();
                     responseData.message = "Go on with the second hand";
                 } else {
-                    while (shuffled.length > 0 && Dealer_check(dealer_score)) {
+                    while (Dealer_check(dealer_score)) {
+                        checkAndReshuffleDeck();
                         dealer_next_card = shuffled.shift();
                         dealer_cards.push(dealer_next_card);
                         dealer_score += Value(dealer_next_card);
-                        for (let card of dealer_cards) {
-                            if (card.value === "A" && dealer_score > 21) {
-                                dealer_score -= 10;
-                            }
-                        }
+                        dealer_score = adjustForAces(dealer_cards, dealer_score);
                     }
                     let result1 = Win(split_score_1, dealer_score, false, dealer_blackjack);
                     let result2 = Win(split_score_2, dealer_score, false, dealer_blackjack);
@@ -187,15 +242,12 @@ app.post("/api/blackjack/play", (req, res) => {
             } else {
                 if (dealer_score === 21 && dealer_cards.length === 2) dealer_blackjack = true;
                 if (player_score === 21 && player_cards.length === 2) player_blackjack = true;
-                while (shuffled.length > 0 && Dealer_check(dealer_score)) {
+                while (Dealer_check(dealer_score)) {
+                    checkAndReshuffleDeck();
                     dealer_next_card = shuffled.shift();
                     dealer_cards.push(dealer_next_card);
                     dealer_score += Value(dealer_next_card);
-                    for (let card of dealer_cards) {
-                        if (card.value === "A" && dealer_score > 21) {
-                            dealer_score -= 10;
-                        }
-                    }
+                    dealer_score = adjustForAces(dealer_cards, dealer_score);
                 }
                 const result = Win(player_score, dealer_score, player_blackjack, dealer_blackjack);
                 switch (result) {
@@ -220,23 +272,12 @@ app.post("/api/blackjack/play", (req, res) => {
             if (isSplit) {
                 const activeHand = current_split === 1 ? split_hand : split_second_hand;
                 let activeScore = current_split === 1 ? split_score_1 : split_score_2;
-                if (shuffled.length === 0) {
-                    responseData.message = "No more cards in the deck.";
-                    return res.status(400).json(responseData);
-                }
                 player_next_card = shuffled.shift();
                 activeHand.push(player_next_card);
                 activeScore += Value(player_next_card);
-                for (let card of activeHand) {
-                    if (card.value === "A" && activeScore > 21) {
-                        activeScore -= 10;
-                    }
-                }
-                if (current_split === 1) {
-                    split_score_1 = activeScore;
-                } else {
-                    split_score_2 = activeScore;
-                }
+                activeScore = adjustForAces(activeHand, activeScore)
+                if (current_split === 1) split_score_1 = activeScore;
+                else split_score_2 = activeScore;
                 updateResponseData();
                 if (activeScore > 21) {
                     if (current_split === 1) {
@@ -244,37 +285,22 @@ app.post("/api/blackjack/play", (req, res) => {
                         responseData.message = "First hand out of bounds. Going on with the second hand";
                         updateResponseData();
                     } else {
-                        while (shuffled.length > 0 && Dealer_check(dealer_score)) {
+                        while (Dealer_check(dealer_score)) {
+                            checkAndReshuffleDeck();
                             dealer_next_card = shuffled.shift();
                             dealer_cards.push(dealer_next_card);
                             dealer_score += Value(dealer_next_card);
-                            for (let card of dealer_cards) {
-                                if (card.value === "A" && dealer_score > 21) {
-                                    dealer_score -= 10;
-                                }
-                            }
+                            dealer_score = adjustForAces(dealer_cards, dealer_score);
                         }
                         let result1 = Win(split_score_1, dealer_score, false, dealer_blackjack);
                         let result2 = Win(split_score_2, dealer_score, false, dealer_blackjack);
                         let result_messages = [];
-                        if (result1 === 1) {
-                            balance += Payment(player_bet, false);
-                            result_messages.push("First hand: Win!");
-                        } else if (result1 === 2) {
-                            balance += player_bet;
-                            result_messages.push("First hand: Tie.");
-                        } else {
-                            result_messages.push("First hand: Lost.");
-                        }
-                        if (result2 === 1) {
-                            balance += Payment(split_bet, false);
-                            result_messages.push("Second hand: Win!");
-                        } else if (result2 === 2) {
-                            balance += split_bet;
-                            result_messages.push("Second hand: Tie.");
-                        } else {
-                            result_messages.push("Second hand: Lost.");
-                        }
+                        if (result1 === 1) balance += Payment(player_bet, false), result_messages.push("First hand: Win!");
+                        else if (result1 === 2) balance += player_bet, result_messages.push("First hand: Tie.");
+                        else result_messages.push("First hand: Lost.");
+                        if (result2 === 1) balance += Payment(split_bet, false), result_messages.push("Second hand: Win!");
+                        else if (result2 === 2) balance += split_bet, result_messages.push("Second hand: Tie.");
+                        else result_messages.push("Second hand: Lost.");
                         GameOver = true;
                         isSplit = false;
                         responseData.message = result_messages.join(" ");
@@ -282,18 +308,10 @@ app.post("/api/blackjack/play", (req, res) => {
                     }
                 }
             } else {
-                if (shuffled.length === 0) {
-                    responseData.message = "No more cards in the deck.";
-                    return res.status(400).json(responseData);
-                }
                 player_next_card = shuffled.shift();
                 player_cards.push(player_next_card);
                 player_score += Value(player_next_card);
-                for (let card of player_cards) {
-                    if (card.value === "A" && player_score > 21) {
-                        player_score -= 10;
-                    }
-                }
+                player_score = adjustForAces(player_cards, player_score);
                 updateResponseData();
                 if (player_score > 21) {
                     GameOver = true;
@@ -304,22 +322,14 @@ app.post("/api/blackjack/play", (req, res) => {
             break;
 
         case "double":
-            if (player_cards.length > 2) {
-                return res.status(400).json({ message: "Cannot double after drawing!" });
-            }
-            if (balance < player_bet) {
-                return res.status(400).json({ message: "You don't have enough money!" });
-            }
+            if (player_cards.length > 2) return res.status(400).json({ message: "Cannot double after drawing!" });
+            if (balance < player_bet) return res.status(400).json({ message: "You don't have enough money!" });
             balance -= player_bet;
             player_bet *= 2;
             player_next_card = shuffled.shift();
             player_cards.push(player_next_card);
             player_score += Value(player_next_card);
-            for (let card of player_cards) {
-                if (card.value === "A" && player_score > 21) {
-                    player_score -= 10;
-                }
-            }
+            player_score = adjustForAces(player_cards, player_score);
             updateResponseData();
             if (player_score > 21) {
                 GameOver = true;
@@ -327,17 +337,12 @@ app.post("/api/blackjack/play", (req, res) => {
                 updateResponseData();
                 return res.json(responseData);
             }
-            if (dealer_score === 21 && dealer_cards.length === 2) dealer_blackjack = true;
-            if (player_score === 21 && player_cards.length === 2) player_blackjack = true;
-            while (shuffled.length > 0 && Dealer_check(dealer_score)) {
+            while (Dealer_check(dealer_score)) {
+                checkAndReshuffleDeck();
                 dealer_next_card = shuffled.shift();
                 dealer_cards.push(dealer_next_card);
                 dealer_score += Value(dealer_next_card);
-                for (let card of dealer_cards) {
-                    if (card.value === "A" && dealer_score > 21) {
-                        dealer_score -= 10;
-                    }
-                }
+                dealer_score = adjustForAces(dealer_cards, dealer_score);
             }
             const result_double = Win(player_score, dealer_score, player_blackjack, dealer_blackjack);
             switch (result_double) {
@@ -358,9 +363,7 @@ app.post("/api/blackjack/play", (req, res) => {
             break;
 
         case "split":
-            if (!Split_action) {
-                return res.status(400).json({ message: "You can't split this hand" });
-            }
+            if (!Split_action) return res.status(400).json({ message: "You can't split this hand" });
             let split_one_first_card = player_cards.shift();
             let split_two_first_card = player_cards.shift();
             let split_one_second_card = shuffled.shift();
@@ -382,8 +385,8 @@ app.post("/api/blackjack/play", (req, res) => {
 });
 
 app.post("/api/blackjack/reset", (req, res) => {
-    deck = [];
-    shuffled = [];
+    deck = CreateDeck();
+    shuffled = ShuffleDeck(deck);
     dealer_card = null;
     player_card = null;
     dealer_first_value = null;
