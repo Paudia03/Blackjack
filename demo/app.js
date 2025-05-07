@@ -5,8 +5,10 @@ import { TestDeck, CreateDeck, ShuffleDeck, Value, Dealer_check, Win, Payment, S
 import connection from "./db_connection.js";
 import crypto from 'crypto';
 import validator from "validator";
+import nodemailer from 'nodemailer';
 
 const PORT = 3000;
+
 const app = express();
 
 app.use(cors());
@@ -39,10 +41,24 @@ let split_score_2 = 0;
 let current_split = 1;
 let isSplit = false;
 let dealer_first_value = 0;
+const pendingVerifications = new Map();
+
 
 deck = CreateDeck();
 shuffled = ShuffleDeck(deck);
 // shuffled = TestDeck(); // usare SOLO per test
+
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: 'blackjackunipr@gmail.com',
+      pass: 'yovrzqgeendusqja'
+    }
+  });
+
+  function generate6DigitCode() {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+}
 
 function generateShortID() {
     return crypto.randomBytes(8).toString('hex');
@@ -111,24 +127,137 @@ app.post("/api/blackjack/signup", (req, res) => {
         });
     }
 
-    const userId = generateShortID();
-    const sql = "INSERT INTO user (user_id, username, password, wallet, games_won, games_played, email) VALUES (?, ?, ?, ?, ?, ?, ?)";
-
-    connection.query(sql, [userId, username, password, 0, 0, 0, email], (err) => {
+    const checkSql = "SELECT * FROM user WHERE email = ? OR username = ?";
+    connection.query(checkSql, [email, username], (err, results) => {
         if (err) {
-            console.error(err); 
-            return res.status(500).json({ 
-                success: false, 
-                message: "Database error. User could not be created." 
+            console.error(err);
+            return res.status(500).json({
+                success: false,
+                message: "Database error while checking existing users."
             });
         }
 
-        return res.status(201).json({ 
+        if (results.length > 0) {
+            const duplicateField = results.find(user => user.email === email) ? 'Email' : 'Username';
+            return res.status(409).json({
+                success: false,
+                message: `${duplicateField} already in use.`
+            });
+        }
+        else {
+            let code = generate6DigitCode();
+            pendingVerifications.set(email, {
+                username,
+                password,
+                code
+            });
+            const mailOptions = {
+                from: 'blackjackunipr@gmail.com',
+                to: email,
+                subject: 'Your Authentication code',
+                text: `Hi ${username},
+
+Thank you for signing up for Blackjack Unipr!
+
+To complete your registration, please enter the following 6-digit verification code:
+
+${code}
+
+This code is valid forever and is required to activate your account.
+
+If you didn't request this, please ignore this message.
+
+Best regards,  
+The Blackjack Unipr Team`
+
+            };
+
+            transporter.sendMail(mailOptions, (error, info) => {
+                if (error) {
+                  return console.log(error);
+                }
+                console.log('Email sent: ' + info.response);
+            });
+
+            return res.status(201).json({ 
+                success: true,
+                message: "Almost there. Submit the authentication code you received.",
+                user: {
+                    username: username,
+                    email: email
+                }
+            });
+        }
+    });
+
+});
+
+app.post("/api/blackjack/authentication", (req, res) => {
+    const { email, code } = req.body;
+
+    const pending = pendingVerifications.get(email);
+
+    if (!pending) {
+        return res.status(400).json({
+            success: false,
+            message: "No pending verification found for this email."
+        });
+    }
+
+    if (pending.code !== code) {
+        return res.status(401).json({
+            success: false,
+            message: "Invalid verification code."
+        });
+    }
+
+    const userId = generateShortID();
+    const sql = "INSERT INTO user (user_id, username, password, wallet, games_won, games_played, email) VALUES (?, ?, ?, ?, ?, ?, ?)";
+
+    connection.query(sql, [userId, pending.username, pending.password, 0, 0, 0, email], (err) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({
+                success: false,
+                message: "Database error. User could not be created."
+            });
+        }
+
+        const mailOptions2 = {
+            from: 'blackjackunipr@gmail.com',
+            to: email,
+            subject: '🎉 Welcome to Blackjack Unipr!',
+            text: `Hi ${pending.username},
+        
+Your account has been successfully created — welcome aboard!
+
+You can now log in and start playing Blackjack on our platform.
+We're excited to have you as part of the Blackjack Unipr community.
+
+If you ever have questions, feedback, or need help, feel free to reach out.
+
+Good luck, and may the cards be ever in your favor! 🃏
+
+Cheers,  
+The Blackjack Unipr Team`
+
+        };
+
+        transporter.sendMail(mailOptions2, (error, info) => {
+            if (error) {
+              return console.log(error);
+            }
+            console.log('Second Email sent: ' + info.response);
+        });
+
+        pendingVerifications.delete(email);
+
+        return res.status(201).json({
             success: true,
             message: "User created successfully.",
             user: {
                 id: userId,
-                username: username,
+                username: pending.username,
                 email: email
             }
         });
@@ -136,7 +265,38 @@ app.post("/api/blackjack/signup", (req, res) => {
 });
 
 
+
 app.post("/api/blackjack/login", (req, res) => {
+
+    const {identifier, password} = req.body;
+    const LoginQuery = "SELECT user_id, username, password, wallet FROM user WHERE email = ? OR username = ?";
+    connection.query(LoginQuery, [identifier, identifier], (err, results) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ success: false, message: "Database error." });
+        }
+    
+        if (results.length === 0) {
+            return res.status(401).json({ success: false, message: "User not found." });
+        }
+    
+        const real_password = results[0].password;
+        if (password == real_password){
+            balance = results[0].wallet;
+            return res.status(201).json({
+                success: true,
+                message: "Login successful.",
+                user: {
+                    username: results[0].username,
+                    balance: balance
+                }
+            });
+        }
+        else return res.status(500).json({
+            success: false,
+            message: `wrong username or password`
+        });
+    });
 
 });
 
