@@ -1,245 +1,159 @@
+// src/components/Blackjack.jsx
 import React, { useState } from "react";
 import axios from "axios";
 
-function Blackjack({ setGameActive, setUser }) {
-  const [gameState, setGameState] = useState(null);
-  const [message, setMessage] = useState("");
-  const [bet, setBet] = useState("");
-  const [balance, setBalance] = useState(100000000); // initial credit
+const IMG_BASE = "/img/Playing Cards/PNG-cards-1.3";
+const RED_BACK  = `${IMG_BASE}/red_back.png`;
+const BLUE_BACK = `${IMG_BASE}/blue_back.png`;
 
-  // Start a new game via API
+function getCardImage(card, isDealer, isHidden) {
+  if (isHidden) return isDealer ? RED_BACK : BLUE_BACK;
+  const map = { K: "king", Q: "queen", J: "jack", A: "ace" };
+  const rank = map[card.value] || card.value.toLowerCase();
+  const suit = card.suit.toLowerCase();
+  return `${IMG_BASE}/${rank}_of_${suit}.png`;
+}
+
+export default function Blackjack({ onGameOver }) {
+  const [gameState, setGameState] = useState(null);
+  const [betInput, setBetInput]   = useState("");
+  const [message, setMessage]     = useState("");
+  const [loading, setLoading]     = useState(false);
+
+  // Notify parent that drawer can open when gameState.Gameover changes
+  const updateState = (data) => {
+    setGameState(data);
+    onGameOver(data.Gameover);
+  };
+
   const startGame = async () => {
-    const betAmount = parseFloat(bet);
-    if (isNaN(betAmount) || betAmount <= 0) {
+    const bet = parseFloat(betInput);
+    if (isNaN(bet) || bet <= 0) {
       setMessage("Inserisci una puntata valida!");
       return;
     }
+    setLoading(true);
+    setMessage("");
     try {
-      const response = await axios.post("http://localhost:3000/api/blackjack/start", { bet: betAmount });
-      setGameState(response.data);
-      setMessage("");
-      setBalance(response.data.your_balance);
-    } catch (error) {
-      console.error(error);
-      setMessage("Errore durante l'inizio della partita");
+      const { data } = await axios.post("http://localhost:3000/api/blackjack/start", { bet });
+      data.dealer_cards = data.dealer_cards.map(c => ({ ...c, isDealer: true }));
+      updateState(data);
+      setMessage(data.message || "");
+    } catch (err) {
+      setMessage(err.response?.data?.message || "Errore avvio partita");
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Hit action: draw a new card
-  const hit = async () => {
+  const playAction = async (action) => {
+    if (!gameState || gameState.Gameover) return;
+    setLoading(true);
+    setMessage("");
     try {
-      // Only allow actions if game is not over
-      if (gameState.gameOver) return;
-      const response = await axios.post("http://localhost:3000/api/blackjack/play", { action: "hit" });
-      setGameState(response.data);
-      if (response.data.message === "Out of bounds") {
-        setMessage("Hai sballato! 😵");
-      }
-    } catch (error) {
-      console.error(error);
-      setMessage("Errore nel pescare una carta");
+      const { data } = await axios.post("http://localhost:3000/api/blackjack/play", { action });
+      data.dealer_cards = data.dealer_cards.map(c => ({ ...c, isDealer: true }));
+      updateState(data);
+      setMessage(data.message || "");
+    } catch (err) {
+      setMessage(err.response?.data?.message || `Errore: ${action}`);
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Stand action: stop drawing cards
-  const stand = async () => {
+  const replay = async () => {
+    if (!gameState) return;
+    setLoading(true);
+    setMessage("");
     try {
-      if (gameState.gameOver) return;
-      const response = await axios.post("http://localhost:3000/api/blackjack/play", { action: "stand" });
-      setGameState(response.data);
-      setMessage(response.data.message);
-      setBalance(response.data.your_balance);
-    } catch (error) {
-      console.error(error);
-      setMessage("Errore nell'azione Stand");
+      await axios.post("http://localhost:3000/api/blackjack/reset");
+      // restart same bet
+      await startGame();
+    } catch {
+      setMessage("Errore reset partita");
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Double Down action
-  const doubleDown = async () => {
-    try {
-      if (gameState.gameOver) return;
-      const response = await axios.post("http://localhost:3000/api/blackjack/play", { action: "double" });
-      setGameState(response.data);
-      setMessage("Double Down effettuato");
-      setBalance(response.data.your_balance);
-    } catch (error) {
-      console.error(error);
-      setMessage("Errore durante il raddoppio");
-    }
-  };
-
-  // Split action: allowed only if the first two cards have the same rank
-  const splitHand = async () => {
-    try {
-      if (gameState.gameOver) return;
-      if (gameState && gameState.playerHands && gameState.playerHands[0].cards.length === 2) {
-        const [card1, card2] = gameState.playerHands[0].cards;
-        if (card1.rank !== card2.rank) {
-          setMessage("Lo split non è possibile: le carte non sono uguali");
-          return;
-        }
-      } else {
-        setMessage("Split non disponibile");
-        return;
-      }
-      const response = await axios.post("http://localhost:3000/api/blackjack/play", { action: "split" });
-      setGameState(response.data);
-      setMessage("Split effettuato");
-      setBalance(response.data.your_balance);
-    } catch (error) {
-      console.error(error);
-      setMessage("Errore durante lo split");
-    }
-  };
-
-  // Replay game: reset the current game state (without altering the credit)
-  const replayGame = async () => {
-    try {
-      const response = await axios.post("http://localhost:3000/api/blackjack/reset");
-      setGameState(null);
-      setBet("");
-      setMessage(response.data.message || "Gioco resettato. Inserisci una nuova puntata.");
-    } catch (error) {
-      console.error(error);
-      setMessage("Errore nel reset del gioco");
-    }
-  };
-
-  // Exit game: return to the profile page
-  const exitGame = () => {
-    // Navigate back to the profile page using parent's function if provided
-    if (typeof setGameActive === "function") {
-      setGameActive(false);
-    } else {
-      // Otherwise, simulate exit by resetting the game state and logging out the user.
-      setGameState(null);
-      setBet("");
-      setMessage("");
-      if (typeof setUser === "function") {
-        setUser(null);
-      }
-    }
+  const renderCard = (card, idx) => {
+    const isDealer = card.isDealer;
+    const isHidden = isDealer && idx === 1 && !gameState.Gameover;
+    return (
+      <img
+        key={idx}
+        src={getCardImage(card, isDealer, isHidden)}
+        alt={card.value || "?"}
+        className="w-16 h-auto mx-1"
+      />
+    );
   };
 
   return (
     <div className="min-h-screen bg-gray-900 p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-3xl font-bold text-white">Blackjack</h2>
-        <p className="text-white">Credito: {balance}</p>
-      </div>
+      <header className="flex justify-center mb-6 text-white">
+        <h1 className="text-3xl font-bold">Tavolo</h1>
+      </header>
 
       {!gameState ? (
-        // Start game screen
-        <div className="max-w-md mx-auto bg-gray-800 p-6 rounded shadow">
-          <div className="mb-4">
-            <label className="block text-gray-300 mb-2">Puntata:</label>
-            <input
-              type="number"
-              value={bet}
-              onChange={(e) => setBet(e.target.value)}
-              placeholder="Inserisci puntata"
-              className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
-            />
-          </div>
-          <button onClick={startGame} className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition">
-            Inizia Nuova Partita
+        <div className="max-w-sm mx-auto bg-gray-800 p-6 rounded shadow">
+          <label className="block text-gray-300 mb-2">Puntata:</label>
+          <input
+            type="number"
+            value={betInput}
+            onChange={e => setBetInput(e.target.value)}
+            disabled={loading}
+            className="w-full px-3 py-2 mb-4 bg-gray-700 border border-gray-600 rounded text-white"
+          />
+          <button
+            onClick={startGame}
+            disabled={loading}
+            className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
+          >
+            {loading ? "Caricamento..." : "Inizia Partita"}
           </button>
-          <div className="mt-4 flex justify-between">
-            <button onClick={exitGame} className="w-1/2 bg-red-600 text-white py-2 rounded hover:bg-red-700 transition">
-              Esci
-            </button>
-          </div>
+          {message && <p className="text-red-500 mt-2">{message}</p>}
         </div>
       ) : (
-        // Game screen
         <div className="max-w-4xl mx-auto">
-          {/* If game is not over, show action buttons; disable actions when game is over */}
-          {!gameState.gameOver ? (
-            <div className="flex flex-col mb-4">
-              <div className="flex justify-between items-center mb-4">
-                <div className="space-x-2">
-                  <button onClick={hit} className="bg-green-600 text-white py-2 px-4 rounded hover:bg-green-700 transition">
-                    Carta 🃏
-                  </button>
-                  <button onClick={stand} className="bg-red-600 text-white py-2 px-4 rounded hover:bg-red-700 transition">
-                    Stare ✋
-                  </button>
-                  <button onClick={doubleDown} className="bg-yellow-600 text-white py-2 px-4 rounded hover:bg-yellow-700 transition">
-                    Raddoppio
-                  </button>
-                  <button onClick={splitHand} className="bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700 transition">
-                    Split
-                  </button>
-                </div>
-              </div>
-              {/* Replay button always visible during an active game */}
-              <div className="mt-4">
-                <button onClick={replayGame} className="w-full bg-gray-600 text-white py-2 rounded hover:bg-gray-700 transition">
-                  Rigioca (Reset)
-                </button>
-              </div>
+          <div className="flex justify-between mb-4 text-white">
+            <span>Puntata: <strong>{gameState.your_bet}</strong></span>
+            <span>Saldo: <strong>{gameState.your_balance}</strong></span>
+            <span>Carte rimaste: <strong>{gameState.remaining_cards}</strong></span>
+          </div>
+
+          <section className="bg-gray-800 rounded shadow p-4 mb-6">
+            <h2 className="text-xl text-white mb-2">Giocatore</h2>
+            <div className="flex">{gameState.player_cards.map(renderCard)}</div>
+            <p className="text-white mt-2">Punti: {gameState.player_score}</p>
+          </section>
+
+          <section className="bg-gray-800 rounded shadow p-4 mb-6">
+            <h2 className="text-xl text-white mb-2">Banco</h2>
+            <div className="flex">{gameState.dealer_cards.map(renderCard)}</div>
+            {gameState.Gameover && (
+              <p className="text-white mt-2">Punti: {gameState.dealer_score}</p>
+            )}
+          </section>
+
+          {message && <p className="text-center text-yellow-400 mb-4">{message}</p>}
+
+          {!gameState.Gameover ? (
+            <div className="flex space-x-2 mb-4">
+              <button onClick={() => playAction("hit")}    disabled={loading} className="flex-1 bg-green-600 py-2 rounded text-white hover:bg-green-700">Carta</button>
+              <button onClick={() => playAction("stand")}  disabled={loading} className="flex-1 bg-red-600 py-2 rounded text-white hover:bg-red-700">Stai</button>
+              <button onClick={() => playAction("double")} disabled={loading} className="flex-1 bg-yellow-600 py-2 rounded text-white hover:bg-yellow-700">Raddoppia</button>
+              <button onClick={() => playAction("split")}  disabled={loading || !gameState.isSplit} className="flex-1 bg-blue-600 py-2 rounded text-white hover:bg-blue-700 disabled:opacity-50">Split</button>
             </div>
           ) : (
-            // When game is over, only show Replay and Exit buttons
-            <div className="flex justify-between mt-4">
-              <button onClick={replayGame} className="w-1/2 bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition mr-2">
-                Rigioca
-              </button>
-              <button onClick={exitGame} className="w-1/2 bg-red-600 text-white py-2 rounded hover:bg-red-700 transition ml-2">
-                Esci
-              </button>
+            <div className="flex space-x-2 mb-4">
+              <button onClick={replay} disabled={loading} className="flex-1 bg-blue-600 py-2 rounded text-white hover:bg-blue-700">Rigioca</button>
+              {/* no logout here; navbar gestisce l'uscita */}
             </div>
           )}
-
-          {/* Display player's cards */}
-          <div className="bg-gray-800 rounded shadow p-4 mb-6">
-            <h4 className="text-xl font-bold text-white mb-2">Carte del Giocatore:</h4>
-            <div className="flex space-x-4">
-              {(gameState.your_cards || (gameState.playerHands && gameState.playerHands[0].cards))?.map((card, i) => (
-                <div key={i} className="border border-gray-600 rounded p-2 bg-gray-700">
-                  <p className="font-bold text-white">{card.rank}</p>
-                  <p className="text-gray-300">{card.suit}</p>
-                </div>
-              ))}
-            </div>
-            {gameState.your_score && <p className="text-white mt-2">Punteggio: {gameState.your_score}</p>}
-          </div>
-
-          {/* Display dealer's cards */}
-          <div className="bg-gray-800 rounded shadow p-4 mb-6">
-            <h4 className="text-xl font-bold text-white mb-2">Carte del Dealer:</h4>
-            <div className="flex space-x-4">
-              {gameState.gameOver
-                ? // If game is over, show all dealer cards
-                  gameState.dealer_cards?.map((card, i) => (
-                    <div key={i} className="border border-gray-600 rounded p-2 bg-gray-700">
-                      <p className="font-bold text-white">{card.rank}</p>
-                      <p className="text-gray-300">{card.suit}</p>
-                    </div>
-                  ))
-                : // If game is active, show only the first dealer card and hide the rest
-                  gameState.dealer_cards && gameState.dealer_cards.length > 0 && (
-                    <div className="border border-gray-600 rounded p-2 bg-gray-700">
-                      <p className="font-bold text-white">{gameState.dealer_cards[0].rank}</p>
-                      <p className="text-gray-300">{gameState.dealer_cards[0].suit}</p>
-                    </div>
-                  )}
-            </div>
-            {gameState.dealer_score && gameState.gameOver && (
-              <p className="text-white mt-2">Punteggio: {gameState.dealer_score}</p>
-            )}
-          </div>
-
-          {message && <p className="text-center text-red-500 mt-4">{message}</p>}
         </div>
       )}
-
-      <div className="mt-6 text-center">
-        <p className="text-white">Credito: {balance}</p>
-      </div>
     </div>
   );
 }
-
-export default Blackjack;
