@@ -3,7 +3,7 @@ import { createPool } from 'mysql2';
 const connection = createPool({
   host: 'localhost',
   user: 'root',
-  password: 'password',
+  password: '',
   database: 'Blackjack_UNIPR',
   waitForConnections: true,
   connectionLimit: 10,

@@ -287,6 +287,7 @@ app.post("/api/blackjack/login", (req, res) => {
                 success: true,
                 message: "Login successful.",
                 user: {
+                    LoggedUser: IsLogged,
                     username: results[0].username,
                     balance: balance
                 }
@@ -302,7 +303,7 @@ app.post("/api/blackjack/login", (req, res) => {
 
 app.post("/api/blackjack/logout", (req, res) => {
     IsLogged = null;
-    return res.status(200).json({ success: true, message: "Logout successful" });
+    return res.status(200).json({ success: true, message: "Logout successful", LoggedUser: IsLogged });
 });
 
 app.post("/api/blackjack/passwordreset", (req, res)=> {
