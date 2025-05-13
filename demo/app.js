@@ -453,6 +453,13 @@ app.post('/api/blackjack/deposit', (req, res) => {
     });
 });
 
+app.get("/api/blackjack/me", (req, res) => {
+  if (IsLogged) {
+    return res.json({ success: true, user: IsLogged });
+  }
+  res.status(401).json({ success: false });
+})
+
 app.post("/api/blackjack/start", (req, res) => {
     if (IsLogged == null){
         return res.status(400).json({ message: "No user is playing" });
