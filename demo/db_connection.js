@@ -1,19 +1,23 @@
-import { createConnection } from 'mysql2';
+import { createPool } from 'mysql2';
 
-const connection = createConnection({
+const connection = createPool({
   host: 'localhost',
-  user: 'root',             
-  password: 'password',               
-  database: 'Blackjack_UNIPR' 
+  user: 'root',
+  password: 'password',
+  database: 'Blackjack_UNIPR',
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0
 });
 
-connection.connect((err) => {
+connection.getConnection((err, conn) => {
   if (err) {
-    console.error('Connection error:', err);
-    return;
+    console.error('❌ Errore nella connessione al DB:', err.code || err.message);
+    process.exit(1);
+  } else {
+    console.log('✅ Connessione al DB riuscita!');
+    conn.release();
   }
-  console.log('DB connection was successful!');
 });
-//prova
 
 export default connection;

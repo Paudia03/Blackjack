@@ -96,11 +96,12 @@ export function Win(yourscore, dealerscore, yourblackjack, dealerblackjack) {
     if (yourscore > 21) return 3; 
     if (dealerscore > 21) return 1; 
 
-    if (yourscore > dealerscore && yourscore < 21) return 1;
-    if (yourscore < dealerscore && dealerscore < 21) return 3;
+    if (yourscore > dealerscore) return 1;
+    if (yourscore < dealerscore) return 3;
     
     return 2; 
 }
+
 
 
 export function Payment(bet, blackjack){

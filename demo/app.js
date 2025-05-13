@@ -361,6 +361,7 @@ app.post("/api/blackjack/passwordreset", (req, res)=> {
             else return res.status(401).json({ success: false, message: "Wrong Password." });
         });
     }
+    else return res.status(401).json({ success: false, message: "No User is Logged" });
 });
 
 app.post("/api/blackjack/confirmreset", (req, res) => {
@@ -386,7 +387,7 @@ app.post("/api/blackjack/confirmreset", (req, res) => {
     connection.query(updatePasswordQuery, [new_password, IsLogged], (err, results) => {
         if (err) {
             console.error(err);
-            return res.status(500).json({ success: false, message: "Database error." });
+            return res.status(400).json({ success: false, message: "Database error." });
         }
         return res.status(200).json({ success: true, message: "Password updated successfully." });
     });
@@ -394,7 +395,7 @@ app.post("/api/blackjack/confirmreset", (req, res) => {
     const mailOptions4 = {
         from: 'blackjackunipr@gmail.com',
         to: email,
-        subject: 'Password Reset',
+        subject: 'Password Reset Was Successful!',
         text: `Hi ${pending.username},
 
 Your password has been reset successfully and you are now able to play!
@@ -414,20 +415,45 @@ The Blackjack Unipr Team`
     });
 
     pendingVerifications.delete(email);
-
-    return res.status(201).json({ 
-        success: true,
-        message: "Password reset succesfully.",
-        user: {
-            username: results[0].username,
-            email: results[0].email
-        }
-    });
     
 });
 
+app.post('/api/blackjack/deposit', (req, res) => {
+    if (!IsLogged) {
+      return res.status(401).json({ message: "No Logged user." });
+    }
+    const {deposit} = req.body;
+    const amount = parseFloat(deposit);
+  
+    if (isNaN(amount) || amount <= 0) {
+      return res.status(400).json({ message: "Not a valid amount." });
+    }
+    const query = `UPDATE user SET wallet = wallet + ? WHERE user_id = ?`;
+    connection.query(query, [amount, IsLogged], (err, result) => {
+        if (err) {
+          console.error("DB error:", err);
+          return res.status(401).json({ message: "Updating error." });
+        }
+    
+        connection.query("SELECT wallet FROM user WHERE user_id = ?", [IsLogged], (err2, results) => {
+          if (err2) {
+            console.error("DB error:", err2);
+            return res.status(401).json({ message: "Error." });
+          }
+    
+          balance = results[0].balance; 
+          updateResponseData();
+    
+          return res.status(200).json({
+            message: `Ricarica completata: €${amount}`,
+            balance
+          });
+        });
+    });
+});
+
 app.post("/api/blackjack/start", (req, res) => {
-    if (IsLogged != null){
+    if (IsLogged == null){
         return res.status(400).json({ message: "No user is playing" });
     }
     else {
