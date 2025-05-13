@@ -1,6 +1,7 @@
 // src/components/Blackjack.jsx
 import React, { useState } from "react";
 import axios from "axios";
+import { useNavigate } from "react-router-dom";
 
 const IMG_BASE = "/img/Playing Cards/PNG-cards-1.3";
 const RED_BACK  = `${IMG_BASE}/red_back.png`;
@@ -14,19 +15,25 @@ function getCardImage(card, isDealer, isHidden) {
   return `${IMG_BASE}/${rank}_of_${suit}.png`;
 }
 
-export default function Blackjack({ onGameOver }) {
+export default function Blackjack({ user, onGameOver }) {
   const [gameState, setGameState] = useState(null);
   const [betInput, setBetInput]   = useState("");
   const [message, setMessage]     = useState("");
   const [loading, setLoading]     = useState(false);
+  const navigate = useNavigate();
 
-  // Notify parent that drawer can open when gameState.Gameover changes
-  const updateState = (data) => {
+  const updateState = data => {
     setGameState(data);
     onGameOver(data.Gameover);
   };
 
   const startGame = async () => {
+    // Se il saldo utente è zero, non si inizia: mostra tasto Ricarica
+    if (user.balance === 0) {
+      setMessage("Saldo 0: ricarica per giocare");
+      return;
+    }
+
     const bet = parseFloat(betInput);
     if (isNaN(bet) || bet <= 0) {
       setMessage("Inserisci una puntata valida!");
@@ -35,7 +42,7 @@ export default function Blackjack({ onGameOver }) {
     setLoading(true);
     setMessage("");
     try {
-      const { data } = await axios.post("http://localhost:3000/api/blackjack/start", { bet });
+      const { data } = await axios.post("/api/blackjack/start", { bet });
       data.dealer_cards = data.dealer_cards.map(c => ({ ...c, isDealer: true }));
       updateState(data);
       setMessage(data.message || "");
@@ -46,12 +53,12 @@ export default function Blackjack({ onGameOver }) {
     }
   };
 
-  const playAction = async (action) => {
+  const playAction = async action => {
     if (!gameState || gameState.Gameover) return;
     setLoading(true);
     setMessage("");
     try {
-      const { data } = await axios.post("http://localhost:3000/api/blackjack/play", { action });
+      const { data } = await axios.post("/api/blackjack/play", { action });
       data.dealer_cards = data.dealer_cards.map(c => ({ ...c, isDealer: true }));
       updateState(data);
       setMessage(data.message || "");
@@ -67,8 +74,7 @@ export default function Blackjack({ onGameOver }) {
     setLoading(true);
     setMessage("");
     try {
-      await axios.post("http://localhost:3000/api/blackjack/reset");
-      // restart same bet
+      await axios.post("/api/blackjack/reset");
       await startGame();
     } catch {
       setMessage("Errore reset partita");
@@ -89,6 +95,9 @@ export default function Blackjack({ onGameOver }) {
       />
     );
   };
+
+  // Se il saldo utente è 0 mostriamo il tasto Ricarica
+  const showRecharge = user.wallet === 0;
 
   return (
     <div className="min-h-screen bg-gray-900 p-6">
@@ -114,6 +123,14 @@ export default function Blackjack({ onGameOver }) {
             {loading ? "Caricamento..." : "Inizia Partita"}
           </button>
           {message && <p className="text-red-500 mt-2">{message}</p>}
+          {showRecharge && (
+            <button
+              onClick={() => navigate("/profile")}
+              className="mt-4 w-full bg-purple-600 text-white py-2 rounded hover:bg-purple-700"
+            >
+              Ricarica Saldo
+            </button>
+          )}
         </div>
       ) : (
         <div className="max-w-4xl mx-auto">
@@ -149,7 +166,6 @@ export default function Blackjack({ onGameOver }) {
           ) : (
             <div className="flex space-x-2 mb-4">
               <button onClick={replay} disabled={loading} className="flex-1 bg-blue-600 py-2 rounded text-white hover:bg-blue-700">Rigioca</button>
-              {/* no logout here; navbar gestisce l'uscita */}
             </div>
           )}
         </div>
