@@ -42,6 +42,7 @@ let current_split = 1;
 let isSplit = false;
 let dealer_first_value = 0;
 const pendingVerifications = new Map();
+let IsLogged = null;
 
 
 deck = CreateDeck();
@@ -264,8 +265,6 @@ The Blackjack Unipr Team`
     });
 });
 
-
-
 app.post("/api/blackjack/login", (req, res) => {
 
     const {identifier, password} = req.body;
@@ -283,6 +282,7 @@ app.post("/api/blackjack/login", (req, res) => {
         const real_password = results[0].password;
         if (password == real_password){
             balance = results[0].wallet;
+            IsLogged = results[0].user_id;
             return res.status(201).json({
                 success: true,
                 message: "Login successful.",
@@ -300,58 +300,189 @@ app.post("/api/blackjack/login", (req, res) => {
 
 });
 
-app.post("/api/blackjack/start", (req, res) => {
-    checkAndReshuffleDeck();
-    const { bet } = req.body;
-    if (!bet || bet <= 0) return res.status(400).json({ message: "Place a bet before starting" });
-    if (bet > balance) return res.status(400).json({ message: "Not enough money!" });
+app.post("/api/blackjack/logout", (req, res) => {
+    IsLogged = null;
+    return res.status(200).json({ success: true, message: "Logout successful" });
+});
 
-    if (GameOver) {
-        Split_action = false;
-        GameOver = false;
-        player_bet = bet;
-        balance -= bet;
-        dealer_cards = [];
-        player_cards = [];
-        split_hand = [];
-        split_second_hand = [];
-        dealer_card = shuffled.shift();
-        player_card = shuffled.shift();
-        dealer_second_card = shuffled.shift();
-        player_second_card = shuffled.shift();
-        dealer_cards.push(dealer_card, dealer_second_card);
-        player_cards.push(player_card, player_second_card);
-        dealer_blackjack = false;
-        player_blackjack = false;
-        Split_action = Splitchecker(player_card, player_second_card);
-        dealer_first_value = Value(dealer_card);
-        const player_first_value = Value(player_card);
-        const dealer_second_value = Value(dealer_second_card);
-        const player_second_value = Value(player_second_card);
-        player_score = player_first_value + player_second_value;
-        dealer_score = dealer_first_value + dealer_second_value;
-        player_blackjack = (player_score === 21);
-        dealer_blackjack = (dealer_score === 21);
-        if (player_blackjack || dealer_blackjack) {
-            if (player_blackjack && !dealer_blackjack) {
-                balance += Payment(player_bet, true);
-                responseData.message = "Blackjack! You won!";
-            } else if (!player_blackjack && dealer_blackjack) {
-                responseData.message = "Blackjack dealer! You lost";
-            } else {
-                balance += player_bet;
-                responseData.message = "Both Blackjack. Tie.";
+app.post("/api/blackjack/passwordreset", (req, res)=> {
+    const{password_tochange}=req.body;
+    if (IsLogged != null){
+        const ResetQuery = "SELECT username, email, password FROM user WHERE user_id = ?";
+        connection.query(ResetQuery, [IsLogged], (err, results) => {
+            if (err) {
+                console.error(err);
+                return res.status(500).json({ success: false, message: "Database error." });
             }
-            updateResponseData();
-            return res.json(responseData);
-        }
-    } else {
-        return res.status(400).json({ message: "Finish this hand" });
+            if (password_tochange == results[0].password){
+                let reset_code = generate6DigitCode();
+                pendingVerifications.set(results[0].email, {
+                    username: results[0].username,
+                    password: results[0].password,
+                    reset_code
+                });
+                const mailOptions3 = {
+                    from: 'blackjackunipr@gmail.com',
+                    to: results[0].email,
+                    subject: 'Password Reset',
+                    text: `Hi ${results[0].username},
+    
+    We're sorry that you lost your password :(
+    
+    To complete your password reset, please enter the following 6-digit verification code:
+    
+    ${reset_code}
+    
+    This code is valid forever and is required to reset your password.
+    
+    If you didn't request this, please ignore this message.
+    
+    Best regards,  
+    The Blackjack Unipr Team`
+    
+                };
+    
+                transporter.sendMail(mailOptions3, (error, info) => {
+                    if (error) {
+                      return console.log(error);
+                    }
+                    console.log('Password Reset Email sent: ' + info.response);
+                });
+    
+                return res.status(201).json({ 
+                    success: true,
+                    message: "Almost there. Submit the authentication code you received.",
+                    user: {
+                        username: results[0].username,
+                        email: results[0].email
+                    }
+                });
+            }
+            else return res.status(401).json({ success: false, message: "Wrong Password." });
+        });
+    }
+});
+
+app.post("/api/blackjack/confirmreset", (req, res) => {
+    const { email, reset_code, new_password } = req.body;
+
+    const pending = pendingVerifications.get(email);
+
+    if (!pending) {
+        return res.status(400).json({
+            success: false,
+            message: "No pending verification found for this email."
+        });
     }
 
-    responseData.message = "Game started";
-    updateResponseData();
-    return res.json(responseData);
+    if (pending.reset_code !== reset_code) {
+        return res.status(401).json({
+            success: false,
+            message: "Invalid verification code."
+        });
+    }
+    const updatePasswordQuery = "UPDATE user SET password = ? WHERE user_id = ?";
+
+    connection.query(updatePasswordQuery, [new_password, IsLogged], (err, results) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ success: false, message: "Database error." });
+        }
+        return res.status(200).json({ success: true, message: "Password updated successfully." });
+    });
+
+    const mailOptions4 = {
+        from: 'blackjackunipr@gmail.com',
+        to: email,
+        subject: 'Password Reset',
+        text: `Hi ${pending.username},
+
+Your password has been reset successfully and you are now able to play!
+
+Please, try to remember it from now on. Write it somewhere, or maybe get it tattooed on your body :)
+
+Best regards,  
+The Blackjack Unipr Team`
+
+    };
+
+    transporter.sendMail(mailOptions4, (error, info) => {
+        if (error) {
+          return console.log(error);
+        }
+        console.log('Second Password Reset Email sent: ' + info.response);
+    });
+
+    pendingVerifications.delete(email);
+
+    return res.status(201).json({ 
+        success: true,
+        message: "Password reset succesfully.",
+        user: {
+            username: results[0].username,
+            email: results[0].email
+        }
+    });
+    
+});
+
+app.post("/api/blackjack/start", (req, res) => {
+    if (IsLogged != null){
+        return res.status(400).json({ message: "No user is playing" });
+    }
+    else {
+        checkAndReshuffleDeck();
+        const { bet } = req.body;
+        if (!bet || bet <= 0) return res.status(400).json({ message: "Place a bet before starting" });
+        if (bet > balance) return res.status(400).json({ message: "Not enough money!" });
+    
+        if (GameOver) {
+            Split_action = false;
+            GameOver = false;
+            player_bet = bet;
+            balance -= bet;
+            dealer_cards = [];
+            player_cards = [];
+            split_hand = [];
+            split_second_hand = [];
+            dealer_card = shuffled.shift();
+            player_card = shuffled.shift();
+            dealer_second_card = shuffled.shift();
+            player_second_card = shuffled.shift();
+            dealer_cards.push(dealer_card, dealer_second_card);
+            player_cards.push(player_card, player_second_card);
+            dealer_blackjack = false;
+            player_blackjack = false;
+            Split_action = Splitchecker(player_card, player_second_card);
+            dealer_first_value = Value(dealer_card);
+            const player_first_value = Value(player_card);
+            const dealer_second_value = Value(dealer_second_card);
+            const player_second_value = Value(player_second_card);
+            player_score = player_first_value + player_second_value;
+            dealer_score = dealer_first_value + dealer_second_value;
+            player_blackjack = (player_score === 21);
+            dealer_blackjack = (dealer_score === 21);
+            if (player_blackjack || dealer_blackjack) {
+                if (player_blackjack && !dealer_blackjack) {
+                    balance += Payment(player_bet, true);
+                    responseData.message = "Blackjack! You won!";
+                } else if (!player_blackjack && dealer_blackjack) {
+                    responseData.message = "Blackjack dealer! You lost";
+                } else {
+                    balance += player_bet;
+                    responseData.message = "Both Blackjack. Tie.";
+                }
+                updateResponseData();
+                return res.json(responseData);
+            }
+        } else {
+            return res.status(400).json({ message: "Finish this hand" });
+        }
+    
+        responseData.message = "Game started";
+        updateResponseData();
+        return res.json(responseData);
+    }
 });
 
 app.post("/api/blackjack/play", (req, res) => {
