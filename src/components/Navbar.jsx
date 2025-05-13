@@ -1,86 +1,44 @@
 // src/components/Navbar.jsx
-import React, { useState } from "react";
+import React from "react";
 import { Link } from "react-router-dom";
 
-export default function Navbar({ user, onLogout }) {
-  const [drawerOpen, setDrawerOpen] = useState(false);
+export default function Navbar({ user, onLogout, canOpenDrawer }) {
+  // Assicuriamoci che balance sia un numero
+  const balanceNum =
+    typeof user.balance === "string"
+      ? parseFloat(user.balance)
+      : user.balance ?? 0;
 
   return (
-    <>
-      {/* Top bar */}
-      <div className="bg-gray-800 text-white flex items-center p-4">
-        {/* Hamburger */}
+    <div className="fixed top-0 left-0 right-0 bg-gray-800 text-white shadow-md z-50">
+      <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+        {/* pulsante menu a tendina */}
         <button
-          onClick={() => setDrawerOpen(true)}
-          className="mr-4 focus:outline-none"
+          disabled={!canOpenDrawer}
+          className={`p-2 rounded hover:bg-gray-700 transition ${
+            !canOpenDrawer ? "opacity-50 cursor-not-allowed" : ""
+          }`}
         >
-          <div className="w-6 h-0.5 bg-white mb-1"></div>
-          <div className="w-6 h-0.5 bg-white mb-1"></div>
-          <div className="w-6 h-0.5 bg-white"></div>
+          &#9776;
         </button>
-        {/* Title / Home link */}
-        <Link to="/" className="text-xl font-bold">
-          Blackjack
-        </Link>
-        {/* Spacer */}
-        <div className="flex-1" />
-        {/* User info */}
-        <div className="flex items-center space-x-4">
-          <span>{user.name}</span>
-          <span>💰 {user.balance.toFixed(2)}€</span>
+
+        <div className="flex items-center space-x-6">
+          <span>{user.username}</span>
+          <span>Saldo: €{balanceNum.toFixed(2)}</span>
+          <Link to="/profile" className="hover:underline">
+            Profilo
+          </Link>
+          <Link to="/blackjack" className="hover:underline">
+            Tavolo
+          </Link>
           <button
             onClick={onLogout}
-            className="bg-red-600 px-3 py-1 rounded hover:bg-red-700"
+            className="bg-red-600 px-3 py-1 rounded hover:bg-red-700 transition"
           >
             Logout
           </button>
         </div>
       </div>
-
-      {/* Overlay */}
-      {drawerOpen && (
-        <div
-          onClick={() => setDrawerOpen(false)}
-          className="fixed inset-0 bg-black bg-opacity-50 z-40"
-        />
-      )}
-
-      {/* Drawer */}
-      <div
-        className={`fixed top-0 left-0 h-full w-64 bg-gray-900 text-white transform ${
-          drawerOpen ? "translate-x-0" : "-translate-x-full"
-        } transition-transform duration-200 z-50`}
-      >
-        <div className="p-4 flex justify-between items-center">
-          <span className="text-lg font-bold">Menu</span>
-          <button onClick={() => setDrawerOpen(false)} className="focus:outline-none">
-            &times;
-          </button>
-        </div>
-        <nav className="flex flex-col mt-4">
-          <Link
-            to="/"
-            onClick={() => setDrawerOpen(false)}
-            className="px-4 py-2 hover:bg-gray-800"
-          >
-            Home
-          </Link>
-          <Link
-            to="/profile"
-            onClick={() => setDrawerOpen(false)}
-            className="px-4 py-2 hover:bg-gray-800"
-          >
-            Profilo
-          </Link>
-          <Link
-            to="/blackjack"
-            onClick={() => setDrawerOpen(false)}
-            className="px-4 py-2 hover:bg-gray-800"
-          >
-            Tavolo
-          </Link>
-        </nav>
-      </div>
-    </>
+    </div>
   );
 }
