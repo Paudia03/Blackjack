@@ -3,7 +3,7 @@ import React, { useState } from "react";
 import axios from "axios";
 
 export default function Profile({ user, setUser }) {
-  // Ensure balance is number
+  // Assicuriamoci che balance sia un numero
   const balanceNum =
     typeof user.balance === "string"
       ? parseFloat(user.balance) || 0
@@ -14,7 +14,7 @@ export default function Profile({ user, setUser }) {
   const [amount, setAmount] = useState("");
   const [message, setMessage] = useState("");
 
-  // Simulated deposit/withdraw functions
+  // Funzione generica per depositi/prelievi
   const handleTransaction = async (type) => {
     const val = parseFloat(amount);
     if (isNaN(val) || val <= 0) {
@@ -22,21 +22,25 @@ export default function Profile({ user, setUser }) {
       return;
     }
     try {
-      // Qui potresti fare:
-      // const res = await axios.post("/api/blackjack/transaction", { userId: user.id, type, amount: val });
-      // setUser({ ...user, balance: res.data.newBalance });
-      let newBal = balanceNum + (type === "deposit" ? val : -val);
-      if (newBal < 0) {
-        setMessage("Saldo insufficiente per prelievo");
-        return;
+      let url;
+      let payload;
+      if (type === "deposit") {
+        url = "/api/blackjack/deposit";
+        payload = { deposit: val };
+      } else {
+        url = "/api/blackjack/withdraw";
+        payload = { withdraw: val };
       }
+      const res = await axios.post(url, payload);
+      // Supponiamo che la risposta contenga il nuovo balance in res.data.balance
+      const newBal = res.data.balance;
       setUser({ ...user, balance: newBal });
       setMessage(type === "deposit"
-        ? `Depositato €${val.toFixed(2)}`
-        : `Prelevato €${val.toFixed(2)}`);
+        ? `Depositati €${val.toFixed(2)}`
+        : `Prelevati €${val.toFixed(2)}`);
       setAmount("");
-    } catch {
-      setMessage("Errore transazione");
+    } catch (err) {
+      setMessage(err.response?.data?.message || "Errore transazione");
     }
   };
 

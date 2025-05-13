@@ -1,5 +1,5 @@
 // src/components/Blackjack.jsx
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 
@@ -20,7 +20,15 @@ export default function Blackjack({ user, onGameOver }) {
   const [betInput, setBetInput]   = useState("");
   const [message, setMessage]     = useState("");
   const [loading, setLoading]     = useState(false);
+  const [balance, setBalance]     = useState(user.balance || 0);
   const navigate = useNavigate();
+
+  // Quando cambia lo state di gioco, aggiorno il saldo
+  useEffect(() => {
+    if (gameState && typeof gameState.your_balance === "number") {
+      setBalance(gameState.your_balance);
+    }
+  }, [gameState]);
 
   const updateState = data => {
     setGameState(data);
@@ -28,8 +36,8 @@ export default function Blackjack({ user, onGameOver }) {
   };
 
   const startGame = async () => {
-    // Se il saldo utente è zero, non si inizia: mostra tasto Ricarica
-    if (user.balance === 0) {
+    // Se il saldo è zero, non chiamare l'API ma mostra il bottone di ricarica
+    if (balance <= 0) {
       setMessage("Saldo 0: ricarica per giocare");
       return;
     }
@@ -96,8 +104,8 @@ export default function Blackjack({ user, onGameOver }) {
     );
   };
 
-  // Se il saldo utente è 0 mostriamo il tasto Ricarica
-  const showRecharge = user.wallet === 0;
+  // Mostro il bottone Ricarica se il saldo reale è zero
+  const showRecharge = balance <= 0;
 
   return (
     <div className="min-h-screen bg-gray-900 p-6">
@@ -136,7 +144,7 @@ export default function Blackjack({ user, onGameOver }) {
         <div className="max-w-4xl mx-auto">
           <div className="flex justify-between mb-4 text-white">
             <span>Puntata: <strong>{gameState.your_bet}</strong></span>
-            <span>Saldo: <strong>{gameState.your_balance}</strong></span>
+            <span>Saldo: <strong>{balance}</strong></span>
             <span>Carte rimaste: <strong>{gameState.remaining_cards}</strong></span>
           </div>
 
