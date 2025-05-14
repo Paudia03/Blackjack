@@ -7,6 +7,8 @@ import crypto from 'crypto';
 import validator from "validator";
 import nodemailer from 'nodemailer';
 
+
+
 const PORT = 3000;
 
 const app = express();
@@ -62,7 +64,7 @@ const transporter = nodemailer.createTransport({
 }
 
 function generateShortID() {
-    return crypto.randomBytes(8).toString('hex');
+    return crypto.randomBytes(8).toString('hex');r
   }
 
 function checkAndReshuffleDeck() {
@@ -328,7 +330,7 @@ app.post("/api/blackjack/passwordreset", (req, res)=> {
                     subject: 'Password Reset',
                     text: `Hi ${results[0].username},
     
-    We're sorry that you lost your password :(
+    We're sorry that you lost your password, please contact support :(
     
     To complete your password reset, please enter the following 6-digit verification code:
     
@@ -453,12 +455,44 @@ app.post('/api/blackjack/deposit', (req, res) => {
     });
 });
 
+/**
+ * GET /api/blackjack/me
+ * Se IsLogged contiene un user_id valido, interroga il database e restituisce
+ * i dati dell’utente (username, balance, email, ecc). Altrimenti 401.
+ */
 app.get("/api/blackjack/me", (req, res) => {
-  if (IsLogged) {
-    return res.json({ success: true, user: IsLogged });
+  if (!IsLogged) {
+    return res.status(401).json({ success: false, message: "Not authenticated" });
   }
-  res.status(401).json({ success: false });
-})
+
+  const sql = `
+    SELECT user_id    AS id,
+           username,
+           email,
+           wallet      AS balance,
+           games_won   AS gamesWon,
+           games_played AS gamesPlayed
+    FROM user
+    WHERE user_id = ?
+    LIMIT 1
+  `;
+
+  connection.query(sql, [IsLogged], (err, results) => {
+    if (err) {
+      console.error("DB error in /me:", err);
+      return res.status(500).json({ success: false, message: "Database error" });
+    }
+    if (results.length === 0) {
+      // utente non trovato => forza logout client
+      IsLogged = null;
+      return res.status(401).json({ success: false, message: "User not found" });
+    }
+
+    // restituisci l’oggetto user completo
+    const user = results[0];
+    return res.json({ success: true, user });
+  });
+});
 
 app.post("/api/blackjack/start", (req, res) => {
     if (IsLogged == null){

@@ -11,8 +11,7 @@ export default function Home() {
           Benvenuto a Blackjack Unipr
         </h1>
         <p className="text-xl text-gray-300 max-w-2xl">
-          Scegli il tuo gioco preferito e tenta la fortuna!  
-          Vivi l’emozione del tavolo da gioco direttamente dal tuo browser.
+         Gioca e tenta la fortuna!  
         </p>
       </header>
 
@@ -48,10 +47,13 @@ export default function Home() {
             </button>
           </Link>
 
-          {/* Coming Soon Card */}
-          <div className="bg-gray-800 rounded-2xl p-6 opacity-75 cursor-not-allowed">
+          {/* Profile Link Card */}
+          <Link
+            to="/profile"
+            className="block bg-gray-800 rounded-2xl p-6 hover:scale-105 transform transition"
+          >
             <div className="flex items-center mb-4">
-              <div className="bg-blue-500 rounded-full p-3">
+              <div className="bg-blue-500 rounded-full p-3 hover:bg-blue-600 transition">
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
                   className="h-6 w-6 text-white"
@@ -59,20 +61,21 @@ export default function Home() {
                   viewBox="0 0 24 24"
                   stroke="currentColor"
                 >
-                  <path d="M13 16h-1v-4h-1m1-4h.01M12 2a10 10 0 1010 10A10 10 0 0012 2z" />
+                  <path d="M5.121 17.804A13.937 13.937 0 0112 15c2.619 0 5.059.798 7.121 2.166M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path d="M19.428 15.341A8 8 0 003.857 15.34" />
                 </svg>
               </div>
-              <h3 className="ml-4 text-2xl font-bold text-gray-400">
-                In Arrivo
+              <h3 className="ml-4 text-2xl font-bold text-white hover:text-blue-400 transition">
+                Profilo & Storico
               </h3>
             </div>
-            <p className="text-gray-500 mb-6">
-              Nuovi giochi in sviluppo, restate sintonizzati!
+            <p className="text-gray-400 mb-6">
+              Qui puoi gestire il tuo profilo e vedere lo storico delle partite.
             </p>
-            <button className="inline-block bg-gray-600 text-gray-300 font-semibold py-2 px-4 rounded-full cursor-not-allowed">
-              Presto Disp.
+            <button className="inline-block bg-blue-500 text-white font-semibold py-2 px-4 rounded-full hover:bg-blue-600 transition">
+              Vai al Profilo
             </button>
-          </div>
+          </Link>
         </div>
       </section>
     </div>
