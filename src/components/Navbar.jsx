@@ -49,7 +49,19 @@ if (hidePaths.includes(location.pathname)) return null;
           {homeDisabled ? (
             <span className={homeClass}>Home</span>
           ) : (
-            <Link to="/" className={homeClass}>Home</Link>
+            <button
+              onClick={async () => {
+                try {
+                  await axios.post("/api/blackjack/reset", {}, { withCredentials: true });
+                  navigate("/");
+                } catch (err) {
+                  console.error("Errore nel reset:", err);
+                }
+              }}
+              className={homeClass}
+            >
+              Home
+            </button>
           )}
 
           {/* Balance */}

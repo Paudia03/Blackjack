@@ -67,7 +67,7 @@ export default function Blackjack({ onGameOver }) {
     setLoading(true);
     setMessage("");
     try {
-      await axios.post("/api/blackjack/reset");
+      //await axios.post("/api/blackjack/reset");
       await startGame();
     } catch {
       setMessage("Errore reset partita");
@@ -145,7 +145,7 @@ export default function Blackjack({ onGameOver }) {
               <button onClick={() => playAction("hit")}    disabled={loading} className="flex-1 bg-green-600 py-2 rounded text-white hover:bg-green-700">Carta</button>
               <button onClick={() => playAction("stand")}  disabled={loading} className="flex-1 bg-red-600 py-2 rounded text-white hover:bg-red-700">Stai</button>
               <button onClick={() => playAction("double")} disabled={loading} className="flex-1 bg-yellow-600 py-2 rounded text-white hover:bg-yellow-700">Raddoppia</button>
-              <button onClick={() => playAction("split")}  disabled={loading || !gameState.isSplit} className="flex-1 bg-blue-600 py-2 rounded text-white hover:bg-blue-700 disabled:opacity-50">Split</button>
+              <button onClick={() => playAction("split")}  disabled={loading || !gameState.Split_action} className="flex-1 bg-blue-600 py-2 rounded text-white hover:bg-blue-700 disabled:opacity-50">Split</button>
             </div>
           ) : (
             <div className="flex space-x-2 mb-4">
