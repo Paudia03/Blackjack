@@ -6,50 +6,47 @@ import connection from "./db_connection.js";
 import crypto from 'crypto';
 import validator from "validator";
 import nodemailer from 'nodemailer';
-import sessionMiddleware from "./session.js";
 
 const PORT = 3000;
-
 const app = express();
-
 app.use(cors());
 app.use(morgan("dev"));
 app.use(json());
-app.use(sessionMiddleware);
 
-let deck = [];
-let shuffled = [];
-let dealer_card = null;
-let player_card = null;
-let dealer_second_card = null;
-let player_second_card = null;
-let dealer_next_card = null;
-let player_next_card = null;
-let player_score = 0;
-let dealer_score = 0;
-let dealer_cards = [];
-let player_cards = [];
-let player_blackjack = false;
-let dealer_blackjack = false;
-let balance = 0;
-let player_bet = 0;
-let split_bet = 0;
-let GameOver = true;
-let Split_action = false;
-let split_hand = [];
-let split_second_hand = [];
-let split_score_1 = 0;
-let split_score_2 = 0;
-let current_split = 1;
-let isSplit = false;
-let dealer_first_value = 0;
 const pendingVerifications = new Map();
-let IsLogged = null;
 
-
-deck = CreateDeck();
-shuffled = ShuffleDeck(deck);
-// shuffled = TestDeck(); // usare SOLO per test
+app.post("/api/blackjack/init", (req, res) => {
+    req.session.deck = [];
+    req.session.shuffled = [];
+    req.session.dealer_card = null;
+    req.session.player_card = null; //da dealer second card sono ancora da cambiare
+    req.session.dealer_second_card = null;
+    req.session.player_second_card = null;
+    req.session.next_card = null;
+    req.session.player_next_card = null;
+    req.session.player_score = 0;
+    req.session.dealer_score = 0;
+    req.session.dealer_cards = [];
+    req.session.player_cards = [];
+    req.session.player_blackjack = false;
+    req.session.dealer_blackjack = false;
+    req.session.balance = 0;
+    req.session.player_bet = 0;
+    req.session.split_bet = 0;
+    req.session.GameOver = true;
+    req.session.Split_action = false;
+    req.session.split_hand = [];
+    req.session.split_second_hand = [];
+    req.session.split_score_1 = 0;
+    req.session.split_score_2 = 0;
+    req.session.current_split = 1;
+    req.session.isSplit = false;
+    req.session.dealer_first_value = 0;
+    req.session.deck = CreateDeck();
+    req.session.shuffled = ShuffleDeck(req.session.deck);
+    req.session.IsLogged = null;
+});
+// req.session.shuffled = TestDeck(); // usare SOLO per test
 
 const transporter = nodemailer.createTransport({
     service: 'gmail',
@@ -68,10 +65,10 @@ function generateShortID() {
   }
 
 function checkAndReshuffleDeck() {
-    if (shuffled.length < 10) {
-        deck = CreateDeck();
-        shuffled = ShuffleDeck(deck);
-        console.log("Deck reshuffled automatically.");
+    if (req.session.shuffled.length() < 10) {
+        req.session.deck = CreateDeck();
+        req.session.shuffled = ShuffleDeck(req.session.deck);
+        console.log("req.session.deck reshuffled automatically.");
     }
 }
 
@@ -97,7 +94,7 @@ let responseData = {
 };
 
 function updateResponseData() {
-    responseData.remaining_cards = shuffled.length;
+    responseData.remaining_cards = req.session.shuffled.length;
     responseData.dealer_first_card_value = dealer_cards.length > 0 ? Value(dealer_cards[0]) : 0;
     responseData.dealer_score = dealer_score;
     responseData.player_score = player_score;
@@ -556,17 +553,17 @@ app.post("/api/blackjack/start", (req, res) => {
             player_cards = [];
             split_hand = [];
             split_second_hand = [];
-            dealer_card = shuffled.shift();
-            player_card = shuffled.shift();
-            dealer_second_card = shuffled.shift();
-            player_second_card = shuffled.shift();
-            dealer_cards.push(dealer_card, dealer_second_card);
-            player_cards.push(player_card, player_second_card);
-            Split_action = Splitchecker(player_card, player_second_card);
+            req.session.dealer_card = req.session.shuffled.shift();
+            req.session.player_card = req.session.shuffled.shift();
+            dealer_second_card = req.session.shuffled.shift();
+            player_second_card = req.session.shuffled.shift();
+            dealer_cards.push(req.session.dealer_card, dealer_second_card);
+            player_cards.push(req.session.player_card, player_second_card);
+            Split_action = Splitchecker(req.session.player_card, player_second_card);
             dealer_blackjack = false;
             player_blackjack = false;
-            dealer_first_value = Value(dealer_card);
-            const player_first_value = Value(player_card);
+            dealer_first_value = Value(req.session.dealer_card);
+            const player_first_value = Value(req.session.player_card);
             const dealer_second_value = Value(dealer_second_card);
             const player_second_value = Value(player_second_card);
             player_score = player_first_value + player_second_value;
@@ -616,7 +613,7 @@ app.post("/api/blackjack/play", (req, res) => {
                 } else {
                     while (Dealer_check(dealer_score)) {
                         checkAndReshuffleDeck();
-                        dealer_next_card = shuffled.shift();
+                        dealer_next_card = req.session.shuffled.shift();
                         dealer_cards.push(dealer_next_card);
                         dealer_score += Value(dealer_next_card);
                         dealer_score = adjustForAces(dealer_cards, dealer_score);
@@ -657,7 +654,7 @@ app.post("/api/blackjack/play", (req, res) => {
                 if (player_score === 21 && player_cards.length === 2) player_blackjack = true;
                 while (Dealer_check(dealer_score)) {
                     checkAndReshuffleDeck();
-                    dealer_next_card = shuffled.shift();
+                    dealer_next_card = req.session.shuffled.shift();
                     dealer_cards.push(dealer_next_card);
                     dealer_score += Value(dealer_next_card);
                     dealer_score = adjustForAces(dealer_cards, dealer_score);
@@ -687,7 +684,7 @@ app.post("/api/blackjack/play", (req, res) => {
             if (isSplit) {
                 const activeHand = current_split === 1 ? split_hand : split_second_hand;
                 let activeScore = current_split === 1 ? split_score_1 : split_score_2;
-                player_next_card = shuffled.shift();
+                player_next_card = req.session.shuffled.shift();
                 activeHand.push(player_next_card);
                 activeScore += Value(player_next_card);
                 activeScore = adjustForAces(activeHand, activeScore)
@@ -702,7 +699,7 @@ app.post("/api/blackjack/play", (req, res) => {
                     } else {
                         while (Dealer_check(dealer_score)) {
                             checkAndReshuffleDeck();
-                            dealer_next_card = shuffled.shift();
+                            dealer_next_card = req.session.shuffled.shift();
                             dealer_cards.push(dealer_next_card);
                             dealer_score += Value(dealer_next_card);
                             dealer_score = adjustForAces(dealer_cards, dealer_score);
@@ -742,7 +739,7 @@ app.post("/api/blackjack/play", (req, res) => {
                     }
                 }
             } else {
-                player_next_card = shuffled.shift();
+                player_next_card = req.session.shuffled.shift();
                 player_cards.push(player_next_card);
                 player_score += Value(player_next_card);
                 player_score = adjustForAces(player_cards, player_score);
@@ -763,7 +760,7 @@ app.post("/api/blackjack/play", (req, res) => {
             balance -= player_bet;
             updateBalance(connection, balance, IsLogged);
             player_bet *= 2;
-            player_next_card = shuffled.shift();
+            player_next_card = req.session.shuffled.shift();
             player_cards.push(player_next_card);
             player_score += Value(player_next_card);
             player_score = adjustForAces(player_cards, player_score);
@@ -777,7 +774,7 @@ app.post("/api/blackjack/play", (req, res) => {
             }
             while (Dealer_check(dealer_score)) {
                 checkAndReshuffleDeck();
-                dealer_next_card = shuffled.shift();
+                dealer_next_card = req.session.shuffled.shift();
                 dealer_cards.push(dealer_next_card);
                 dealer_score += Value(dealer_next_card);
                 dealer_score = adjustForAces(dealer_cards, dealer_score);
@@ -806,8 +803,8 @@ app.post("/api/blackjack/play", (req, res) => {
             if (!Split_action) return res.status(400).json({ message: "You can't split this hand" });
             let split_one_first_card = player_cards.shift();
             let split_two_first_card = player_cards.shift();
-            let split_one_second_card = shuffled.shift();
-            let split_two_second_card = shuffled.shift();
+            let split_one_second_card = req.session.shuffled.shift();
+            let split_two_second_card = req.session.shuffled.shift();
             split_hand.push(split_one_first_card, split_one_second_card);
             split_second_hand.push(split_two_first_card, split_two_second_card);
             split_score_1 = Value(split_one_first_card) + Value(split_one_second_card);
@@ -826,10 +823,10 @@ app.post("/api/blackjack/play", (req, res) => {
 });
 
 app.post("/api/blackjack/reset", (req, res) => {
-    deck = CreateDeck();
-    shuffled = ShuffleDeck(deck);
-    dealer_card = null;
-    player_card = null;
+    req.session.deck = CreateDeck();
+    req.session.shuffled = ShuffleDeck(req.session.deck);
+    req.session.dealer_card = null;
+    req.session.player_card = null;
     dealer_first_value = null;
     dealer_second_card = null;
     player_second_card = null;
