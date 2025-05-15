@@ -7,14 +7,12 @@ export default function Blackjack({ onGameOver }) {
   const [betInput, setBetInput]   = useState("");
   const [message, setMessage]     = useState("");
   const [loading, setLoading]     = useState(false);
+  const [showLowBalanceModal, setShowLowBalanceModal] = useState(false);
 
-  // Quando il gioco finisce o si esce, notifico al genitore
-  // se può aprire la navbar/drawer di nuovo
   const notifyGameOver = (over) => {
     onGameOver(over);
   };
 
-  // Exit della partita: torno alla schermata di puntata
   const exitGame = () => {
     setGameState(null);
     setBetInput("");
@@ -33,13 +31,18 @@ export default function Blackjack({ onGameOver }) {
     setMessage("");
     try {
       const { data } = await axios.post("/api/blackjack/start", { bet });
-      // aggiungo il flag isDealer alle carte del dealer
       data.dealer_cards = data.dealer_cards.map(c => ({ ...c, isDealer: true }));
       setGameState(data);
       setMessage(data.message || "");
       notifyGameOver(false);
     } catch (err) {
-      setMessage(err.response?.data?.message || "Errore avvio partita");
+      const errMsg = err.response?.data?.message;
+      if (errMsg === "Not enough money!") {
+        // saldo insufficiente: mostro il popup
+        setShowLowBalanceModal(true);
+      } else {
+        setMessage(errMsg || "Errore avvio partita");
+      }
     } finally {
       setLoading(false);
     }
@@ -67,7 +70,6 @@ export default function Blackjack({ onGameOver }) {
     setLoading(true);
     setMessage("");
     try {
-      //await axios.post("/api/blackjack/reset");
       await startGame();
     } catch {
       setMessage("Errore reset partita");
@@ -81,14 +83,44 @@ export default function Blackjack({ onGameOver }) {
     const hidden   = isDealer && idx === 1 && !gameState.Gameover;
     const src = hidden
       ? "/img/Playing Cards/PNG-cards-1.3/red_back.png"
-      : `/img/Playing Cards/PNG-cards-1.3/${(  
-          { K:"king", Q:"queen", J:"jack", A:"ace" }[card.value] || card.value.toLowerCase()
-        )}_of_${card.suit.toLowerCase()}.png`;
+      : `/img/Playing Cards/PNG-cards-1.3/${
+          ({ K:"king", Q:"queen", J:"jack", A:"ace" }[card.value] || card.value.toLowerCase())
+        }_of_${card.suit.toLowerCase()}.png`;
     return <img key={idx} src={src} alt="" className="w-16 h-auto mx-1" />;
   };
 
   return (
     <div className="min-h-screen bg-gray-900 p-6">
+      {/* Modal saldo insufficiente */}
+      {showLowBalanceModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded p-6 w-80 text-center">
+            <h2 className="text-xl font-bold mb-4">Saldo Esaurito</h2>
+            <p className="mb-6">Non hai credito sufficiente per giocare.</p>
+            <div className="flex space-x-2">
+              <button
+                onClick={() => {
+                  setShowLowBalanceModal(false);
+                  exitGame();
+                }}
+                className="flex-1 bg-red-600 text-white py-2 rounded hover:bg-red-700"
+              >
+                Esci
+              </button>
+              <button
+                onClick={() => {
+                  setShowLowBalanceModal(false);
+                  window.location.href = "/profile";
+                }}
+                className="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
+              >
+                Vai al Profilo
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <header className="flex justify-center mb-6 text-white">
         <h1 className="text-3xl font-bold">Tavolo</h1>
       </header>
