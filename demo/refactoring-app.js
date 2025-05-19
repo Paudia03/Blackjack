@@ -13,38 +13,41 @@ app.use(cors());
 app.use(morgan("dev"));
 app.use(json());
 
-const pendingVerifications = new Map();
 
 app.post("/api/blackjack/init", (req, res) => {
-    req.session.deck = [];
-    req.session.shuffled = [];
-    req.session.dealer_card = null;
-    req.session.player_card = null; //da dealer second card sono ancora da cambiare
-    req.session.dealer_second_card = null;
-    req.session.player_second_card = null;
-    req.session.next_card = null;
-    req.session.player_next_card = null;
-    req.session.player_score = 0;
-    req.session.dealer_score = 0;
-    req.session.dealer_cards = [];
-    req.session.player_cards = [];
-    req.session.player_blackjack = false;
-    req.session.dealer_blackjack = false;
-    req.session.balance = 0;
-    req.session.player_bet = 0;
-    req.session.split_bet = 0;
-    req.session.GameOver = true;
-    req.session.Split_action = false;
-    req.session.split_hand = [];
-    req.session.split_second_hand = [];
-    req.session.split_score_1 = 0;
-    req.session.split_score_2 = 0;
-    req.session.current_split = 1;
-    req.session.isSplit = false;
-    req.session.dealer_first_value = 0;
-    req.session.deck = CreateDeck();
-    req.session.shuffled = ShuffleDeck(req.session.deck);
-    req.session.IsLogged = null;
+    if (!req.session.IsLogged){
+        return res.status(401).json({ error: "No user logged" });
+    }
+    else {
+        req.session.pendingVerifications = new Map();
+        req.session.deck = [];
+        req.session.shuffled = [];
+        req.session.dealer_card = null;
+        req.session.player_card = null; //da dealer second card sono ancora da cambiare
+        req.session.dealer_second_card = null;
+        req.session.player_second_card = null;
+        req.session.next_card = null;
+        req.session.player_next_card = null;
+        req.session.player_score = 0;
+        req.session.dealer_score = 0;
+        req.session.dealer_cards = [];
+        req.session.player_cards = [];
+        req.session.player_blackjack = false;
+        req.session.dealer_blackjack = false;
+        req.session.player_bet = 0;
+        req.session.split_bet = 0;
+        req.session.Split_action = false;
+        req.session.split_hand = [];
+        req.session.split_second_hand = [];
+        req.session.split_score_1 = 0;
+        req.session.split_score_2 = 0;
+        req.session.current_split = 1;
+        req.session.isSplit = false;
+        req.session.dealer_first_value = 0;
+        req.session.deck = CreateDeck();
+        req.session.shuffled = ShuffleDeck(req.session.deck);
+        return res.status(200).json({ message: "Sessione inizializzata" });
+    }
 });
 // req.session.shuffled = TestDeck(); // usare SOLO per test
 
@@ -151,7 +154,7 @@ app.post("/api/blackjack/signup", (req, res) => {
         return res.status(409).json({ success: false, message: `${duplicateField} already in use.` });
       }
       let code = generate6DigitCode();
-      pendingVerifications.set(email, { username, password, code });
+      req.session.pendingVerifications.set(email, { username, password, code });
       const mailOptions = {
         from: 'blackjackunipr@gmail.com',
         to: email,
@@ -183,7 +186,7 @@ The Blackjack Unipr Team`
 
 app.post("/api/blackjack/authentication", (req, res) => {
   const { email, code } = req.body;
-  const pending = pendingVerifications.get(email);
+  const pending = req.session.pendingVerifications.get(email);
   if (!pending) {
     return res.status(400).json({ success: false, message: "No pending verification found for this email." });
   }
@@ -216,7 +219,7 @@ Cheers,
 The Blackjack Unipr Team`
     };
     SendMail(mailOptions2);
-    pendingVerifications.delete(email);
+    req.session.pendingVerifications.delete(email);
     return res.status(201).json({
       success: true,
       message: "User created successfully.",
@@ -301,7 +304,7 @@ The Blackjack Unipr Team`;
 
       const reset_code = generate6DigitCode();
 
-      pendingVerifications.set(user.email, { username: user.username, reset_code });
+      req.session.pendingVerifications.set(user.email, { username: user.username, reset_code });
 
       const mailOptions3 = {
         from: 'blackjackunipr@gmail.com',
@@ -330,7 +333,7 @@ The Blackjack Unipr Team`;
       const user = results[0];
       const reset_code = generate6DigitCode();
 
-      pendingVerifications.set(user.email, { username: user.username, reset_code });
+      req.session.pendingVerifications.set(user.email, { username: user.username, reset_code });
 
       const mailOptions3 = {
         from: 'blackjackunipr@gmail.com',
@@ -352,7 +355,7 @@ The Blackjack Unipr Team`;
 app.post("/api/blackjack/confirmreset", (req, res) => {
   const { email, reset_code, new_password } = req.body;
 
-  const pending = pendingVerifications.get(email);
+  const pending = req.session.pendingVerifications.get(email);
 
   if (!pending) {
     return res.status(400).json({ success: false, message: "No pending verification found for this email." });
@@ -363,7 +366,7 @@ app.post("/api/blackjack/confirmreset", (req, res) => {
   }
   const updatePasswordQuery = "UPDATE user SET password = ? WHERE user_id = ?";
 
-  connection.query(updatePasswordQuery, [new_password, req.session.IsLogged], (err, results) => {
+  connection.query(updatePasswordQuery, [new_password, pending], (err, results) => {
     if (err) {
       console.error(err);
       return res.status(400).json({ success: false, message: "Database error." });
@@ -385,7 +388,7 @@ The Blackjack Unipr Team`
 
   SendMail(mailOptions4);
 
-  pendingVerifications.delete(email);
+  req.session.pendingVerifications.delete(email);
 
 });
 
@@ -412,7 +415,7 @@ app.post('/api/blackjack/deposit', (req, res) => {
         return res.status(401).json({ message: "Error." });
       }
 
-      req.session.balance = results[0].balance; 
+      req.session.balance = results[0].wallet; 
       updateResponseData(req);
 
       return res.status(200).json({
@@ -799,3 +802,5 @@ app.post("/api/blackjack/reset", (req, res) => {
 
   return res.json(responseData);
 });
+
+app.listen(PORT, () => console.log(`Server is online on port: ${PORT}`));
