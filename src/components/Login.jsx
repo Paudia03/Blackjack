@@ -2,9 +2,7 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Signup from "./Signup";
-import ResetPassword from "./ResetPassword";
 import axios from "axios";
-
 
 export default function Login({ setUser }) {
   const navigate = useNavigate();
@@ -12,10 +10,9 @@ export default function Login({ setUser }) {
   const [password, setPassword]     = useState("");
   const [error, setError]           = useState("");
   const [showSignup, setShowSignup] = useState(false);
-  const [showReset, setShowReset]   = useState(false);
   const [loading, setLoading]       = useState(false);
 
-  // Credenziali fittizie
+  // Fake credentials
   const FAKE_EMAIL    = "test@example.com";
   const FAKE_PASSWORD = "1234";
 
@@ -30,28 +27,31 @@ export default function Login({ setUser }) {
     setError("");
     setLoading(true);
 
-    // login fittizio
-    if (email === FAKE_EMAIL && password === FAKE_PASSWORD) {
-      setUser({
-        username: "Demo User",
-        balance: 1000,
-      });
-      navigate("/");
-      setLoading(false);
-      return;
-    }
-
     try {
-      const res = await axios.post("/api/blackjack/login", {
-        identifier: email,
-        password,
-      });
-      if (res.data.success) {
-        setUser(res.data.user);
-        navigate("/");
+      // prima il login
+      let userData;
+      if (email === FAKE_EMAIL && password === FAKE_PASSWORD) {
+        userData = { username: "Demo User", balance: 1000 };
       } else {
-        setError(res.data.message);
+        const res = await axios.post("/api/blackjack/login", {
+          identifier: email,
+          password,
+        });
+        if (!res.data.success) {
+          setError(res.data.message);
+          setLoading(false);
+          return;
+        }
+        userData = res.data.user;
       }
+
+      // inizializzo la sessione sul server
+      await axios.post("/api/blackjack/init");
+
+      // salvo lo user in App.jsx e navigo
+      setUser(userData);
+      navigate("/", { replace: true });
+
     } catch (err) {
       setError(err.response?.data?.message || "Errore login");
     } finally {
@@ -59,12 +59,13 @@ export default function Login({ setUser }) {
     }
   };
 
-  // se apro il signup o reset, mostro quel form
   if (showSignup) {
-    return <Signup onRegistered={handleRegistered} onCancel={() => setShowSignup(false)} />;
-  }
-  if (showReset) {
-    return <ResetPassword onCancel={() => setShowReset(false)} />;
+    return (
+      <Signup
+        onRegistered={handleRegistered}
+        onCancel={() => setShowSignup(false)}
+      />
+    );
   }
 
   return (
@@ -110,7 +111,7 @@ export default function Login({ setUser }) {
           </button>
         </form>
 
-        <div className="mt-4 text-center space-y-2">
+        <div className="mt-4 text-center">
           <p className="text-gray-400">
             Non hai un account?{" "}
             <button
@@ -119,16 +120,6 @@ export default function Login({ setUser }) {
               className="text-blue-400 hover:underline"
             >
               Registrati
-            </button>
-          </p>
-          <p>
-            {/* Link reset */}
-            <button
-              onClick={() => setShowReset(true)}
-              disabled={loading}
-              className="text-yellow-400 hover:underline"
-            >
-              Password dimenticata?
             </button>
           </p>
           <p className="mt-2 text-gray-500 text-sm">
