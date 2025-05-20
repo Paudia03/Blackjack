@@ -10,11 +10,14 @@ import sessionMiddleware from "./session.js";
 
 const PORT = 3000;
 const app = express();
-app.use(cors());
 app.use(morgan("dev"));
 app.use(json());
 app.use(sessionMiddleware);
 
+app.use(cors({
+  origin: 'http://localhost:5173',  // l’URL del tuo front-end Vite
+  credentials: true                 // permette l’invio/ricezione di cookie
+}));
 // req.session.shuffled = TestDeck(); // usare SOLO per test
 
 const transporter = nodemailer.createTransport({
@@ -50,7 +53,7 @@ function checkAndReshuffleDeck(req) {
 }
 
 
-let responseData = {
+/*let responseData = {
   message: "",
   dealer_cards: [],
   dealer_score: 0,
@@ -69,27 +72,31 @@ let responseData = {
   dealer_blackjack: false,
   player_blackjack: false,
   Split_action: false
-};
+};*/
 
 function updateResponseData(req) {
-  responseData.remaining_cards = req.session.shuffled.length;
-  responseData.dealer_first_card_value = req.session.dealer_cards.length > 0 ? Value(req.session.dealer_cards[0]) : 0;
-  responseData.dealer_score = req.session.dealer_score;
-  responseData.player_score = req.session.player_score;
-  responseData.your_balance = req.session.balance;
-  responseData.your_bet = req.session.player_bet;
-  responseData.dealer_cards = req.session.dealer_cards;
-  responseData.player_cards = req.session.player_cards;
-  responseData.Gameover = req.session.GameOver;
-  responseData.first_hand = req.session.isSplit ? { cards: req.session.split_hand, score: req.session.split_score_1 } : null;
-  responseData.second_hand = req.session.isSplit ? { cards: req.session.split_second_hand, score: req.session.split_score_2 } : null;
-  responseData.active_hand = req.session.isSplit ? req.session.current_split : null;
-  responseData.isSplit = req.session.isSplit;
-  responseData.split_bet = req.session.split_bet;
-  responseData.dealer_blackjack = req.session.dealer_blackjack;
-  responseData.player_blackjack = req.session.player_blackjack;
-  responseData.Split_action = req.session.Split_action;
+  return {
+    message: req.session.message,
+    dealer_cards: req.session.dealer_cards,
+    dealer_score: req.session.dealer_score,
+    dealer_first_card_value: req.session.dealer_cards.length > 0 ? Value(req.session.dealer_cards[0]) : 0,
+    player_cards: req.session.player_cards,
+    player_score: req.session.player_score,
+    your_balance: req.session.balance,
+    your_bet: req.session.player_bet,
+    remaining_cards: req.session.shuffled.length,
+    Gameover: req.session.GameOver,
+    isSplit: req.session.isSplit,
+    first_hand: req.session.isSplit ? { cards: req.session.split_hand, score: req.session.split_score_1 } : null,
+    second_hand: req.session.isSplit ? { cards: req.session.split_second_hand, score: req.session.split_score_2 } : null,
+    active_hand: req.session.isSplit ? req.session.current_split : null,
+    split_bet: req.session.split_bet,
+    dealer_blackjack: req.session.dealer_blackjack,
+    player_blackjack: req.session.player_blackjack,
+    Split_action: req.session.Split_action
+  };
 }
+
 
 function updateBalance(connection, new_balance, userId) {
   connection.query(
@@ -143,6 +150,7 @@ app.post("/api/blackjack/init", (req, res) => {
         req.session.dealer_first_value = 0;
         req.session.deck = CreateDeck();
         req.session.shuffled = ShuffleDeck(req.session.deck);
+        req.session.message = "";
         return res.status(200).json({ message: "Sessione inizializzata" });
     }
 });
@@ -410,6 +418,7 @@ app.post('/api/blackjack/deposit', (req, res) => {
   if (!req.session.IsLogged) {
     return res.status(401).json({ message: "No Logged user." });
   }
+  let responseData = updateResponseData(req);
   const {deposit} = req.body;
   const amount = parseFloat(deposit);
 
@@ -430,7 +439,7 @@ app.post('/api/blackjack/deposit', (req, res) => {
       }
 
       req.session.balance = results[0].wallet; 
-      updateResponseData(req);
+      responseData = updateResponseData(req);
 
       return res.status(200).json({
         message: `Ricarica completata: €${amount}`,
@@ -463,6 +472,7 @@ app.post("/api/blackjack/start", (req, res) => {
   if (!req.session.IsLogged){
     return res.status(400).json({ message: "No user is playing" });
   } else {
+    let responseData = updateResponseData(req);
     connection.query("SELECT wallet FROM user WHERE user_id = ?", [req.session.IsLogged], (err, results) => {
       if (err) {
         console.error("Unable to find balance:", err);
@@ -497,30 +507,30 @@ app.post("/api/blackjack/start", (req, res) => {
         req.session.dealer_score = req.session.dealer_first_value + Value(req.session.dealer_second_card);
         req.session.player_blackjack = (req.session.player_score === 21);
         req.session.dealer_blackjack = (req.session.dealer_score === 21);
-        updateResponseData(req);
+        responseData = updateResponseData(req);
 
         if (req.session.player_blackjack || req.session.dealer_blackjack) {
           if (req.session.player_blackjack && !req.session.dealer_blackjack) {
             req.session.balance += Payment(req.session.player_bet, true);
             updateBalance(connection, req.session.balance, req.session.IsLogged);
-            responseData.message = "Blackjack! You won!";
+            req.session.message = "Blackjack! You won!";
           } else if (!req.session.player_blackjack && req.session.dealer_blackjack) {
-            responseData.message = "Blackjack dealer! You lost";
+            req.session.message = "Blackjack dealer! You lost";
           } else {
             req.session.balance += req.session.player_bet;
             updateBalance(connection, req.session.balance, req.session.IsLogged);
-            responseData.message = "Both Blackjack. Tie.";
+            req.session.message = "Both Blackjack. Tie.";
           }
           req.session.GameOver = true;
-          updateResponseData(req);
+          responseData = updateResponseData(req);
           return res.json(responseData);
         }
       } else {
         return res.status(400).json({ message: "Finish this hand" });
       }
 
-      responseData.message = "Game started";
-      updateResponseData(req);
+      req.session.message = "Game started";
+      responseData = updateResponseData(req);
       return res.json(responseData);
     });
   }
@@ -529,261 +539,229 @@ app.post("/api/blackjack/start", (req, res) => {
 app.post("/api/blackjack/play", (req, res) => {
     checkAndReshuffleDeck(req);
     const { action } = req.body;
-
+    let responseData = updateResponseData(req);
     switch (action) {
         case "stand":
-            if (isSplit) {
-                if (current_split === 1) {
-                    current_split = 2;
-                    updateResponseData(req);
-                    responseData.message = "Go on with the second hand";
+            if (req.session.isSplit) {
+                if (req.session.current_split === 1) {
+                    req.session.current_split = 2;
+                    responseData = updateResponseData(req);
+                    req.session.message = "Go on with the second hand";
                 } else {
-                    while (Dealer_check(dealer_score)) {
+                    while (Dealer_check(req.session.dealer_score)) {
                         checkAndReshuffleDeck(req);
-                        dealer_next_card = req.session.shuffled.shift();
-                        dealer_cards.push(dealer_next_card);
-                        dealer_score += Value(dealer_next_card);
-                        dealer_score = adjustForAces(dealer_cards, dealer_score);
+                        req.session.dealer_next_card = req.session.shuffled.shift();
+                        req.session.dealer_cards.push(req.session.dealer_next_card);
+                        req.session.dealer_score += Value(req.session.dealer_next_card);
+                        req.session.dealer_score = adjustForAces(req.session.dealer_cards, req.session.dealer_score);
                     }
-                    let result1 = Win(split_score_1, dealer_score, false, dealer_blackjack);
-                    let result2 = Win(split_score_2, dealer_score, false, dealer_blackjack);
+                    let result1 = Win(req.session.split_score_1, req.session.dealer_score, false, req.session.dealer_blackjack);
+                    let result2 = Win(req.session.split_score_2, req.session.dealer_score, false, req.session.dealer_blackjack);
                     let result_messages = [];
                     if (result1 === 1) {
-                        balance += Payment(player_bet, false);
-                        updateBalance(connection, balance, IsLogged);
+                        req.session.balance += Payment(req.session.player_bet, false);
+                        updateBalance(connection, req.session.balance, req.session.IsLogged);
                         result_messages.push("First hand: Win!");
                     } else if (result1 === 2) {
-                        balance += player_bet;
-                        updateBalance(connection, balance, IsLogged);
+                        req.session.balance += req.session.player_bet;
+                        updateBalance(connection, req.session.balance, req.session.IsLogged);
                         result_messages.push("First hand: Tie.");
                     } else {
-                        updateBalance(connection, balance, IsLogged);
+                        updateBalance(connection, req.session.balance, req.session.IsLogged);
                         result_messages.push("First hand: Lost.");
                     }
                     if (result2 === 1) {
-                        balance += Payment(split_bet, false);
-                        updateBalance(connection, balance, IsLogged);
+                        req.session.balance += Payment(req.session.split_bet, false);
+                        updateBalance(connection, req.session.balance, req.session.IsLogged);
                         result_messages.push("Second hand: Win!");
                     } else if (result2 === 2) {
-                        balance += split_bet;
-                        updateBalance(connection, balance, IsLogged);
+                        req.session.balance += req.session.split_bet;
+                        updateBalance(connection, req.session.balance, req.session.IsLogged);
                         result_messages.push("Second hand: Tie.");
                     } else {
                         result_messages.push("Second hand: Lost.");
                     }
-                    GameOver = true;
-                    isSplit = false;
-                    responseData.message = result_messages.join(" ");
-                    updateResponseData(req);
+                    req.session.GameOver = true;
+                    req.session.isSplit = false;
+                    req.session.message = result_messages.join(" ");
+                    responseData = updateResponseData(req);
                 }
             } else {
-                if (dealer_score === 21 && dealer_cards.length === 2) dealer_blackjack = true;
-                if (player_score === 21 && player_cards.length === 2) player_blackjack = true;
-                while (Dealer_check(dealer_score)) {
+                if (req.session.dealer_score === 21 && req.session.dealer_cards.length === 2) req.session.dealer_blackjack = true;
+                if (req.session.player_score === 21 && req.session.player_cards.length === 2) req.session.player_blackjack = true;
+                while (Dealer_check(req.session.dealer_score)) {
                     checkAndReshuffleDeck(req);
-                    dealer_next_card = req.session.shuffled.shift();
-                    dealer_cards.push(dealer_next_card);
-                    dealer_score += Value(dealer_next_card);
-                    dealer_score = adjustForAces(dealer_cards, dealer_score);
+                    req.session.dealer_next_card = req.session.shuffled.shift();
+                    req.session.dealer_cards.push(req.session.dealer_next_card);
+                    req.session.dealer_score += Value(req.session.dealer_next_card);
+                    req.session.dealer_score = adjustForAces(req.session.dealer_cards, req.session.dealer_score);
                 }
-                const result = Win(player_score, dealer_score, player_blackjack, dealer_blackjack);
+                const result = Win(req.session.player_score, req.session.dealer_score, req.session.player_blackjack, req.session.dealer_blackjack);
                 switch (result) {
                     case 1:
-                        balance += Payment(player_bet, player_blackjack);
-                        updateBalance(connection, balance, IsLogged);
-                        responseData.message = "You Won!";
+                        req.session.balance += Payment(req.session.player_bet, req.session.player_blackjack);
+                        updateBalance(connection, req.session.balance, req.session.IsLogged);
+                        req.session.message = "You Won!";
                         break;
                     case 2:
-                        balance += player_bet;
-                        updateBalance(connection, balance, IsLogged);
-                        responseData.message = "Tie!";
+                        req.session.balance += req.session.player_bet;
+                        updateBalance(connection, req.session.balance, req.session.IsLogged);
+                        req.session.message = "Tie!";
                         break;
                     case 3:
-                        responseData.message = "You Lost!";
+                        req.session.message = "You Lost!";
                         break;
                 }
-                GameOver = true;
-                updateResponseData(req);
+                req.session.GameOver = true;
+                responseData = updateResponseData(req);
             }
             break;
 
         case "hit":
-            if (isSplit) {
-                const activeHand = current_split === 1 ? split_hand : split_second_hand;
-                let activeScore = current_split === 1 ? split_score_1 : split_score_2;
-                player_next_card = req.session.shuffled.shift();
-                activeHand.push(player_next_card);
-                activeScore += Value(player_next_card);
+            if (req.session.isSplit) {
+                const activeHand = req.session.current_split === 1 ? req.session.split_hand : req.session.split_second_hand;
+                let activeScore = req.session.current_split === 1 ? req.session.split_score_1 : req.session.split_score_2;
+                req.session.player_next_card = req.session.shuffled.shift();
+                activeHand.push(req.session.player_next_card);
+                activeScore += Value(req.session.player_next_card);
                 activeScore = adjustForAces(activeHand, activeScore)
-                if (current_split === 1) split_score_1 = activeScore;
-                else split_score_2 = activeScore;
-                updateResponseData(req);
+                if (req.session.current_split === 1) req.session.split_score_1 = activeScore;
+                else req.session.split_score_2 = activeScore;
+                responseData = updateResponseData(req);
                 if (activeScore > 21) {
-                    if (current_split === 1) {
-                        current_split = 2;
-                        responseData.message = "First hand out of bounds. Going on with the second hand";
-                        updateResponseData(req);
+                    if (req.session.current_split === 1) {
+                        req.session.current_split = 2;
+                        req.session.message = "First hand out of bounds. Going on with the second hand";
+                        responseData = updateResponseData(req);
                     } else {
-                        while (Dealer_check(dealer_score)) {
+                        while (Dealer_check(req.session.dealer_score)) {
                             checkAndReshuffleDeck(req);
-                            dealer_next_card = req.session.shuffled.shift();
-                            dealer_cards.push(dealer_next_card);
-                            dealer_score += Value(dealer_next_card);
-                            dealer_score = adjustForAces(dealer_cards, dealer_score);
+                            req.session.dealer_next_card = req.session.shuffled.shift();
+                            req.session.dealer_cards.push(req.session.dealer_next_card);
+                            req.session.dealer_score += Value(req.session.dealer_next_card);
+                            req.session.dealer_score = adjustForAces(req.session.dealer_cards, req.session.dealer_score);
                         }
-                        let result1 = Win(split_score_1, dealer_score, false, dealer_blackjack);
-                        let result2 = Win(split_score_2, dealer_score, false, dealer_blackjack);
+                        let result1 = Win(req.session.split_score_1, req.session.dealer_score, false, req.session.dealer_blackjack);
+                        let result2 = Win(req.session.split_score_2, req.session.dealer_score, false, req.session.dealer_blackjack);
                         let result_messages = [];
                         if (result1 === 1){
-                            balance += Payment(player_bet, false);
-                            updateBalance(connection, balance, IsLogged);
+                            req.session.balance += Payment(req.session.player_bet, false);
+                            updateBalance(connection, req.session.balance, req.session.IsLogged);
                             result_messages.push("First hand: Win!");
                         }
                         else if (result1 === 2) {
-                            balance += player_bet;
-                            updateBalance(connection, balance, IsLogged);
+                            req.session.balance += req.session.player_bet;
+                            updateBalance(connection, req.session.balance, req.session.IsLogged);
                             result_messages.push("First hand: Tie.");
                         }
                         else{
                             result_messages.push("First hand: Lost.");
                         }
                         if (result2 === 1){
-                            balance += Payment(split_bet, false); 
-                            updateBalance(connection, balance, IsLogged);
+                            req.session.balance += Payment(req.session.split_bet, false); 
+                            updateBalance(connection, req.session.balance, req.session.IsLogged);
                             result_messages.push("Second hand: Win!");
                         }
                         else if (result2 === 2){
-                            balance += split_bet;
-                            updateBalance(connection, balance, IsLogged);
+                            req.session.balance += req.session.split_bet;
+                            updateBalance(connection, req.session.balance, req.session.IsLogged);
                             result_messages.push("Second hand: Tie.");
                         }
                         else result_messages.push("Second hand: Lost.");
-                        GameOver = true;
-                        isSplit = false;
-                        Split_action = false;
-                        responseData.message = result_messages.join(" ");
-                        updateResponseData(req);
+                        req.session.GameOver = true;
+                        req.session.isSplit = false;
+                        req.session.Split_action = false;
+                        req.session.message = result_messages.join(" ");
+                        responseData = updateResponseData(req);
                     }
                 }
             } else {
-                player_next_card = req.session.shuffled.shift();
-                player_cards.push(player_next_card);
-                player_score += Value(player_next_card);
-                player_score = adjustForAces(player_cards, player_score);
-                updateResponseData(req);
-                if (player_score > 21) {
-                    GameOver = true;
-                    responseData.message = "Out of bounds";
-                    updateBalance(connection, balance, IsLogged);
-                    updateResponseData(req);
+                req.session.player_next_card = req.session.shuffled.shift();
+                req.session.player_cards.push(req.session.player_next_card);
+                req.session.player_score += Value(req.session.player_next_card);
+                req.session.player_score = adjustForAces(req.session.player_cards, req.session.player_score);
+                responseData = updateResponseData(req);
+                if (req.session.player_score > 21) {
+                    req.session.GameOver = true;
+                    req.session.message = "Out of bounds";
+                    updateBalance(connection, req.session.balance, req.session.IsLogged);
+                    responseData = updateResponseData(req);
                 }
             }
             break;
 
         case "double":
-            if (Split_action) return res.status(400).json({ message: "Cannot double after splitting!" });
-            if (player_cards.length > 2) return res.status(400).json({ message: "Cannot double after drawing!" });
-            if (balance < player_bet) return res.status(400).json({ message: "You don't have enough money!" });
-            balance -= player_bet;
-            updateBalance(connection, balance, IsLogged);
-            player_bet *= 2;
-            player_next_card = req.session.shuffled.shift();
-            player_cards.push(player_next_card);
-            player_score += Value(player_next_card);
-            player_score = adjustForAces(player_cards, player_score);
-            updateResponseData(req);
-            if (player_score > 21) {
-                GameOver = true;
-                responseData.message = "You Lost! (Double bet)";
-                updateBalance(connection, balance, IsLogged);
-                updateResponseData(req);
+            if (req.session.Split_action) return res.status(400).json({ message: "Cannot double after splitting!" });
+            if (req.session.player_cards.length > 2) return res.status(400).json({ message: "Cannot double after drawing!" });
+            if (req.session.balance < req.session.player_bet) return res.status(400).json({ message: "You don't have enough money!" });
+            req.session.balance -= req.session.player_bet;
+            updateBalance(connection, req.session.balance, req.session.IsLogged);
+            req.session.player_bet *= 2;
+            req.session.player_next_card = req.session.shuffled.shift();
+            req.session.player_cards.push(req.session.player_next_card);
+            req.session.player_score += Value(req.session.player_next_card);
+            req.session.player_score = adjustForAces(req.session.player_cards, req.session.player_score);
+            responseData = updateResponseData(req);
+            if (req.session.player_score > 21) {
+                req.session.GameOver = true;
+                req.session.message = "You Lost! (Double bet)";
+                updateBalance(connection, req.session.balance, req.session.IsLogged);
+                responseData = updateResponseData(req);
                 return res.json(responseData);
             }
-            while (Dealer_check(dealer_score)) {
+            while (Dealer_check(req.session.dealer_score)) {
                 checkAndReshuffleDeck(req);
-                dealer_next_card = req.session.shuffled.shift();
-                dealer_cards.push(dealer_next_card);
-                dealer_score += Value(dealer_next_card);
-                dealer_score = adjustForAces(dealer_cards, dealer_score);
+                req.session.dealer_next_card = req.session.shuffled.shift();
+                req.session.dealer_cards.push(req.session.dealer_next_card);
+                req.session.dealer_score += Value(req.session.dealer_next_card);
+                req.session.dealer_score = adjustForAces(req.session.dealer_cards, req.session.dealer_score);
             }
-            const result_double = Win(player_score, dealer_score, player_blackjack, dealer_blackjack);
+            const result_double = Win(req.session.player_score, req.session.dealer_score, req.session.player_blackjack, req.session.dealer_blackjack);
             switch (result_double) {
                 case 1:
-                    balance += Payment(player_bet, player_blackjack);
-                    updateBalance(connection, balance, IsLogged);
-                    responseData.message = "You Won!";
+                    req.session.balance += Payment(req.session.player_bet, req.session.player_blackjack);
+                    updateBalance(connection, req.session.balance, req.session.IsLogged);
+                    req.session.message = "You Won!";
                     break;
                 case 2:
-                    balance += player_bet;
-                    updateBalance(connection, balance, IsLogged);
-                    responseData.message = "Tie!";
+                    req.session.balance += req.session.player_bet;
+                    updateBalance(connection, req.session.balance, req.session.IsLogged);
+                    req.session.message = "Tie!";
                     break;
                 case 3:
-                    responseData.message = "You Lost!";
+                    req.session.message = "You Lost!";
                     break;
             }
-            GameOver = true;
-            updateResponseData(req);
+            req.session.GameOver = true;
+            responseData = updateResponseData(req);
             break;
 
         case "split":
-            if (!Split_action) return res.status(400).json({ message: "You can't split this hand" });
-            let split_one_first_card = player_cards.shift();
-            let split_two_first_card = player_cards.shift();
+            if (!req.session.Split_action) return res.status(400).json({ message: "You can't split this hand" });
+            let split_one_first_card = req.session.player_cards.shift();
+            let split_two_first_card = req.session.player_cards.shift();
             let split_one_second_card = req.session.shuffled.shift();
             let split_two_second_card = req.session.shuffled.shift();
-            split_hand.push(split_one_first_card, split_one_second_card);
-            split_second_hand.push(split_two_first_card, split_two_second_card);
-            split_score_1 = Value(split_one_first_card) + Value(split_one_second_card);
-            split_score_2 = Value(split_two_first_card) + Value(split_two_second_card);
-            isSplit = true;
-            current_split = 1;
-            split_bet = player_bet;
-            balance -= split_bet;
-            updateBalance(connection, balance, IsLogged);
-            responseData.message = "Hand split. Playing first hand:";
-            updateResponseData(req);
+            req.session.split_hand.push(split_one_first_card, split_one_second_card);
+            req.session.split_second_hand.push(split_two_first_card, split_two_second_card);
+            req.session.split_score_1 = Value(split_one_first_card) + Value(split_one_second_card);
+            req.session.split_score_2 = Value(split_two_first_card) + Value(split_two_second_card);
+            req.session.isSplit = true;
+            req.session.current_split = 1;
+            req.session.split_bet = req.session.player_bet;
+            req.session.balance -= req.session.split_bet;
+            updateBalance(connection, req.session.balance, req.session.IsLogged);
+            req.session.message = "Hand split. Playing first hand:";
+            responseData = updateResponseData(req);
             break;
     }
-  switch (action) {
-    case "stand":
-      if (req.session.isSplit && req.session.current_split === 1) {
-        req.session.current_split = 2;
-        updateResponseData(req);
-        responseData.message = "Go on with the second hand";
-        return res.json(responseData);
-      }
-      // fall through to dealer logic
-    case "hit":
-      {
-        const card = req.session.shuffled.shift();
-        if (req.session.isSplit) {
-          // split-hand logic unchanged, just prefix...
-        } else {
-          req.session.player_cards.push(card);
-          req.session.player_score = adjustForAces(req.session.player_cards, req.session.player_score + Value(card));
-          updateResponseData(req);
-          if (req.session.player_score > 21) {
-            req.session.GameOver = true;
-            responseData.message = "Out of bounds";
-            updateResponseData(req);
-          }
-          return res.json(responseData);
-        }
-      }
-      break;
-    case "double":
-      // double logic unchanged, just prefix...
-      return res.status(400).json({ message: "Not implemented here" });
-    case "split":
-      // split logic unchanged, just prefix...
-      return res.status(400).json({ message: "Not implemented here" });
-    default:
-      return res.status(400).json({ message: "Invalid action." });
-  }
+
+    return res.json(responseData);
 });
 
+
 app.post("/api/blackjack/reset", (req, res) => {
+  let responseData = updateResponseData(req);
   req.session.deck = CreateDeck();
   req.session.shuffled = ShuffleDeck(req.session.deck);
   req.session.dealer_card = null;
@@ -812,7 +790,7 @@ app.post("/api/blackjack/reset", (req, res) => {
   req.session.dealer_first_value = 0;
 
   // Aggiorna il responseData con lo stato appena resettato
-  updateResponseData(req);
+  responseData = updateResponseData(req);
 
   return res.json(responseData);
 });
