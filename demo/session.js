@@ -3,8 +3,7 @@ import MySQLStore from "express-mysql-session";
 import connection from "./db_connection.js";
 
 const MySQLStoreConstructor = MySQLStore(session);
-
-const sessionStore = new MySQLStoreConstructor({}, connection.promise());
+const sessionStore = new MySQLStoreConstructor({}, connection);
 
 const sessionMiddleware = session({
   key: "blackjack.sid",
