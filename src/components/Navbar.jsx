@@ -23,10 +23,11 @@ if (hidePaths.includes(location.pathname)) return null;
         onLogout();
         navigate("/login", { replace: true });
       }
-    } catch {
-      onLogout();
-      navigate("/login", { replace: true });
-    }
+    } catch (err) {
+  console.error("Errore nel refresh:", err);
+  onLogout();
+  navigate("/login", { replace: true });
+}
   };
 
   // disable Home link when game in progress

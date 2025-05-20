@@ -24,6 +24,7 @@ function AppRoutes({ user, setUser, canOpenDrawer, setCanOpenDrawer }) {
       {!hideNav && user && (
         <Navbar
           user={user}
+          setUser={setUser}
           onLogout={() => {
             // logout backend session
             axios.post("/api/blackjack/logout", {}, { withCredentials: true })
