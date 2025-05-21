@@ -3,9 +3,9 @@ import React, { useState } from "react";
 import axios from "axios";
 
 export default function ResetPassword({ onCancel }) {
-  const [email, setEmail]       = useState("");
-  const [message, setMessage]   = useState("");
-  const [loading, setLoading]   = useState(false);
+  const [email, setEmail]     = useState("");
+  const [message, setMessage] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleReset = async e => {
     e.preventDefault();
@@ -17,9 +17,11 @@ export default function ResetPassword({ onCancel }) {
     }
     setLoading(true);
     try {
-      const res = await axios.post("/api/blackjack/passwordreset", {
-        email: mail
-      });
+      const res = await axios.post(
+        "/api/blackjack/passwordreset",
+        { email: mail },
+        { withCredentials: true }
+      );
       if (res.data.success) {
         setMessage("Codice inviato alla tua email");
       } else {
