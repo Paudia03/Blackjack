@@ -129,3 +129,4 @@ export function Splitchecker(card, card_2){
     }
     else return false;
 }
+
