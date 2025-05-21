@@ -12,7 +12,6 @@ export default function Signup({ onRegistered, onCancel }) {
     password: "",
     repeatPassword: "",
   });
-  const [code, setCode] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -30,12 +29,17 @@ export default function Signup({ onRegistered, onCancel }) {
     setLoading(true);
     try {
       const username = `${form.firstName} ${form.lastName}`;
-      const res = await axios.post("/api/blackjack/signup", {
-        email: form.email,
-        username,
-        password: form.password,
-        repeat_password: form.repeatPassword,
-      });
+      await axios.post(
+        "/api/blackjack/signup",
+        {
+          email: form.email,
+          username,
+          password: form.password,
+          repeat_password: form.repeatPassword,
+        },
+        { withCredentials: true }
+      );
+      // avanzamento alla schermata di conferma
       setStep(2);
     } catch (err) {
       setError(err.response?.data?.message || "Registrazione fallita");
@@ -44,23 +48,7 @@ export default function Signup({ onRegistered, onCancel }) {
     }
   };
 
-  const handleVerify = async e => {
-    e.preventDefault();
-    setError("");
-    setLoading(true);
-    try {
-      const res = await axios.post("/api/blackjack/authentication", {
-        email: form.email,
-        code,
-      });
-      onRegistered(res.data.user);
-      navigate("/");
-    } catch (err) {
-      setError(err.response?.data?.message || "Verifica fallita");
-    } finally {
-      setLoading(false);
-    }
-  };
+  // Schermata finale: istruzioni e torna al login
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-900 p-4">
@@ -69,18 +57,19 @@ export default function Signup({ onRegistered, onCancel }) {
           <>
             <h2 className="text-2xl font-bold mb-4">Registrazione</h2>
             <form onSubmit={handleSignup} className="space-y-4">
-              {/* firstName, lastName, email, password, repeatPassword */}
-              {["firstName","lastName","email","password","repeatPassword"].map(name => (
-                <div key={name}>
-                  <label className="block text-gray-300 mb-1">
-                    {name === "password" || name === "repeatPassword"
-                      ? name === "password" ? "Password" : "Ripeti Password"
-                      : name.charAt(0).toUpperCase() + name.slice(1)}
-                  </label>
+              {[
+                { name: "firstName", label: "Nome", type: "text" },
+                { name: "lastName", label: "Cognome", type: "text" },
+                { name: "email", label: "Email", type: "email" },
+                { name: "password", label: "Password", type: "password" },
+                { name: "repeatPassword", label: "Ripeti Password", type: "password" }
+              ].map(field => (
+                <div key={field.name}>
+                  <label className="block text-gray-300 mb-1">{field.label}</label>
                   <input
-                    name={name}
-                    type={name.includes("password")?"password": name==="email"?"email":"text"}
-                    value={form[name]}
+                    name={field.name}
+                    type={field.type}
+                    value={form[field.name]}
                     onChange={handleChange}
                     disabled={loading}
                     className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
@@ -105,33 +94,16 @@ export default function Signup({ onRegistered, onCancel }) {
           </>
         ) : (
           <>
-            <h2 className="text-2xl font-bold mb-4">Verifica Email</h2>
-            <form onSubmit={handleVerify} className="space-y-4">
-              <div>
-                <label className="block text-gray-300 mb-1">Codice a 6 cifre</label>
-                <input
-                  value={code}
-                  onChange={e => setCode(e.target.value)}
-                  maxLength={6}
-                  disabled={loading}
-                  className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
-                  required
-                />
-              </div>
-              {error && <p className="text-red-500">{error}</p>}
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full bg-green-600 py-2 rounded hover:bg-green-700"
-              >
-                {loading ? "Verifica..." : "Verifica"}
-              </button>
-            </form>
-            <div className="mt-4 text-center">
-              <button onClick={onCancel} disabled={loading} className="text-gray-400 hover:underline">
-                Torna al login
-              </button>
-            </div>
+            <h2 className="text-2xl font-bold mb-4">Benvenuto!</h2>
+            <p className="mb-6">
+              Ti arriverà a breve una mail di conferma con il codice per completare la registrazione.
+            </p>
+            <button
+              onClick={onCancel}
+              className="w-full bg-green-600 py-2 rounded hover:bg-green-700"
+            >
+              Torna al login
+            </button>
           </>
         )}
       </div>
