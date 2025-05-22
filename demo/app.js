@@ -1,7 +1,7 @@
 import express, { json } from "express";
 import cors from "cors";
 import morgan from "morgan";
-import { TestDeck, CreateDeck, ShuffleDeck, Value, Dealer_check, Win, Payment, Splitchecker, adjustForAces } from './functions.js';
+import { CreateDeck, ShuffleDeck, Value, Dealer_check, Win, Payment, Splitchecker, adjustForAces} from './functions.js';
 import connection from "./db_connection.js";
 import crypto from 'crypto';
 import validator from "validator";
@@ -15,10 +15,9 @@ app.use(json());
 app.use(sessionMiddleware);
 
 app.use(cors({
-  origin: 'http://localhost:5173',  // l’URL del tuo front-end Vite
-  credentials: true                 // permette l’invio/ricezione di cookie
+  origin: 'http://localhost:5173', 
+  credentials: true                
 }));
-// req.session.shuffled = TestDeck(); // usare SOLO per test
 
 const transporter = nodemailer.createTransport({
     service: 'gmail',
@@ -51,28 +50,6 @@ function checkAndReshuffleDeck(req) {
     console.log("req.session.deck reshuffled automatically.");
   }
 }
-
-
-/*let responseData = {
-  message: "",
-  dealer_cards: [],
-  dealer_score: 0,
-  dealer_first_card_value: 0,
-  player_cards: [],
-  player_score: 0,
-  your_balance: 0,
-  your_bet: 0,
-  remaining_cards: 0,
-  Gameover: true,
-  isSplit: false,
-  first_hand: null,
-  second_hand: null,
-  active_hand: null,
-  split_bet: 0,
-  dealer_blackjack: false,
-  player_blackjack: false,
-  Split_action: false
-};*/
 
 function updateResponseData(req) {
   return {
@@ -116,6 +93,8 @@ function SendMail(mailoptions) {
 }
 
 
+
+
 app.post("/api/blackjack/init", (req, res) => {
     console.log("INIT chiamato");
     console.log("Session:", req.session);
@@ -123,7 +102,6 @@ app.post("/api/blackjack/init", (req, res) => {
         return res.status(401).json({ error: "No user logged" });
     }
     else {
-        req.session.pendingVerifications = new Map();
         req.session.deck = [];
         req.session.shuffled = [];
         req.session.dealer_card = null;
@@ -156,13 +134,16 @@ app.post("/api/blackjack/init", (req, res) => {
 });
 
 app.post("/api/blackjack/signup", (req, res) => {
-  const {email, username, password, repeat_password } = req.body;
+  const { email, username, password, repeat_password } = req.body;
+
+  // 1. Validazioni di formato
   if (!validator.isEmail(email)) {
     return res.status(400).json({ success: false, message: "Invalid email format." });
   }
   if (password !== repeat_password) {
     return res.status(400).json({ success: false, message: "The two passwords don't match." });
   }
+
   connection.query(
     "SELECT * FROM user WHERE email = ? OR username = ?",
     [email, username],
@@ -172,83 +153,122 @@ app.post("/api/blackjack/signup", (req, res) => {
         return res.status(500).json({ success: false, message: "Database error while checking existing users." });
       }
       if (results.length > 0) {
-        const duplicateField = results.find(user => user.email === email) ? 'Email' : 'Username';
+        const duplicateField = results.find(u => u.email === email) ? 'Email' : 'Username';
         return res.status(409).json({ success: false, message: `${duplicateField} already in use.` });
       }
-      let code = generate6DigitCode();
-      req.session.pendingVerifications.set(email, { username, password, code });
-      const mailOptions = {
-        from: 'blackjackunipr@gmail.com',
-        to: email,
-        subject: 'Your Authentication code',
-        text: `Hi ${username},
 
-Thank you for signing up for Blackjack Unipr!
+      const code = generate6DigitCode();
+      const sql = `
+        INSERT INTO pending_verifications 
+          (email, username, password, code, action_type)
+        VALUES (?, ?, ?, ?, 'signup')
+        ON DUPLICATE KEY UPDATE
+          username = VALUES(username),
+          password = VALUES(password),
+          code = VALUES(code)
+      `;
+      connection.query(
+        sql,
+        [email, username, password, code],
+        (err2) => {
+          if (err2) {
+            console.error(err2);
+            return res.status(500).json({ success: false, message: "Database error while saving verification." });
+          }
 
-To complete your registration, please enter the following 6-digit verification code:
 
-${code}
+          const mailOptions = {
+            from: 'blackjackunipr@gmail.com',
+            to: email,
+            subject: 'Your Authentication code',
+            text: `Hi ${username},\n\n` +
+                  `Thank you for signing up for Blackjack Unipr!\n\n` +
+                  `To complete your registration, please enter the following 6-digit verification code:\n\n` +
+                  `${code}\n\n` +
+                  `This code is valid forever and is required to activate your account.\n\n` +
+                  `If you didn't request this, please ignore this message.\n\n` +
+                  `Best regards,\nThe Blackjack Unipr Team`
+          };
+          SendMail(mailOptions);
 
-This code is valid forever and is required to activate your account.
-
-If you didn't request this, please ignore this message.
-
-Best regards,  
-The Blackjack Unipr Team`
-      };
-      SendMail(mailOptions);
-      return res.status(201).json({
-        success: true,
-        message: "Almost there. Submit the authentication code you received.",
-        user: { username, email }
-      });
+          return res.status(201).json({
+            success: true,
+            message: "Almost there. Submit the authentication code you received.",
+            user: { username, email }
+          });
+        }
+      );
     }
   );
 });
 
+
 app.post("/api/blackjack/authentication", (req, res) => {
   const { email, code } = req.body;
-  const pending = req.session.pendingVerifications.get(email);
-  if (!pending) {
-    return res.status(400).json({ success: false, message: "No pending verification found for this email." });
-  }
-  if (pending.code !== code) {
-    return res.status(401).json({ success: false, message: "Invalid verification code." });
-  }
-  const userId = generateShortID();
-  const sql = "INSERT INTO user (user_id, username, password, wallet, games_won, games_played, email) VALUES (?, ?, ?, ?, ?, ?, ?)";
-  connection.query(sql, [userId, pending.username, pending.password, 0, 0, 0, email], (err) => {
-    if (err) {
-      console.error(err);
-      return res.status(500).json({ success: false, message: "Database error. User could not be created." });
+
+  connection.query(
+    "SELECT * FROM pending_verifications WHERE email = ? AND action_type = 'signup' AND code = ?",
+    [email, code],
+    (err, results) => {
+      if (err) {
+        console.error(err);
+        return res.status(500).json({ success: false, message: "Database error while fetching verification." });
+      }
+
+      if (results.length === 0) {
+        return res.status(401).json({ success: false, message: "Invalid verification code or no pending signup." });
+      }
+
+      const pending = results[0];
+
+      const userId = generateShortID();
+      const sqlInsertUser =
+        "INSERT INTO user (user_id, username, password, wallet, games_won, games_played, email) " +
+        "VALUES (?, ?, ?, ?, ?, ?, ?)";
+      connection.query(
+        sqlInsertUser,
+        [userId, pending.username, pending.password, 0, 0, 0, email],
+        (err2) => {
+          if (err2) {
+            console.error(err2);
+            return res.status(500).json({ success: false, message: "Database error. User could not be created." });
+          }
+
+          connection.query(
+            "DELETE FROM pending_verifications WHERE email = ? AND action_type = 'signup'",
+            [email],
+            (err3) => {
+              if (err3) {
+                console.error(err3);
+              }
+
+              const mailOptions2 = {
+                from: 'blackjackunipr@gmail.com',
+                to: email,
+                subject: '🎉 Welcome to Blackjack Unipr!',
+                text: `Hi ${pending.username},\n\n` +
+                      `Your account has been successfully created — welcome aboard!\n\n` +
+                      `You can now log in and start playing Blackjack on our platform.\n` +
+                      `We're excited to have you as part of the Blackjack Unipr community.\n\n` +
+                      `If you ever have questions, feedback, or need help, feel free to reach out.\n\n` +
+                      `Good luck, and may the cards be ever in your favor! 🃏\n\n` +
+                      `Cheers,\nThe Blackjack Unipr Team`
+              };
+              SendMail(mailOptions2);
+
+              return res.status(201).json({
+                success: true,
+                message: "User created successfully.",
+                user: { id: userId, username: pending.username, email }
+              });
+            }
+          );
+        }
+      );
     }
-    const mailOptions2 = {
-      from: 'blackjackunipr@gmail.com',
-      to: email,
-      subject: '🎉 Welcome to Blackjack Unipr!',
-      text: `Hi ${pending.username},
-
-Your account has been successfully created — welcome aboard!
-
-You can now log in and start playing Blackjack on our platform.
-We're excited to have you as part of the Blackjack Unipr community.
-
-If you ever have questions, feedback, or need help, feel free to reach out.
-
-Good luck, and may the cards be ever in your favor! 🃏
-
-Cheers,  
-The Blackjack Unipr Team`
-    };
-    SendMail(mailOptions2);
-    req.session.pendingVerifications.delete(email);
-    return res.status(201).json({
-      success: true,
-      message: "User created successfully.",
-      user: { id: userId, username: pending.username, email }
-    });
-  });
+  );
 });
+
 
 app.post("/api/blackjack/login", (req, res) => {
 
@@ -312,7 +332,6 @@ Best regards,
 The Blackjack Unipr Team`;
 
   if (req.session.IsLogged != null) {
-    // Utente loggato: verifica password attuale
     const ResetQuery = "SELECT username, email, password FROM user WHERE user_id = ?";
     connection.query(ResetQuery, [req.session.IsLogged], (err, results) => {
       if (err) return res.status(500).json({ success: false, message: "Database error." });
@@ -321,29 +340,42 @@ The Blackjack Unipr Team`;
         return res.status(404).json({ success: false, message: "User not found." });
 
       const user = results[0];
+
       if (password_tochange !== user.password)
         return res.status(401).json({ success: false, message: "Wrong Password." });
 
       const reset_code = generate6DigitCode();
 
-      req.session.pendingVerifications.set(user.email, { username: user.username, reset_code });
+      const insertQuery = `
+        INSERT INTO pending_verifications (email, username, code, action_type)
+        VALUES (?, ?, ?, 'reset_password')
+        ON DUPLICATE KEY UPDATE code = VALUES(code), username = VALUES(username), action_type = 'reset_password'
+      `;
+      connection.query(insertQuery, [user.email, user.username, reset_code], (err2) => {
+        if (err2) {
+          console.error(err2);
+          return res.status(500).json({ success: false, message: "Database error during code storage." });
+        }
 
-      const mailOptions3 = {
-        from: 'blackjackunipr@gmail.com',
-        to: user.email,
-        subject: 'Password Reset',
-        text: commonMailText(user.username, reset_code)
-      };
+        const mailOptions3 = {
+          from: 'blackjackunipr@gmail.com',
+          to: user.email,
+          subject: 'Password Reset',
+          text: commonMailText(user.username, reset_code)
+        };
 
-      SendMail(mailOptions3);
-      return res.status(201).json({
-        success: true,
-        message: "Almost there. Submit the authentication code you received.",
-        user: { username: user.username, email: user.email }
+        SendMail(mailOptions3);
+        return res.status(201).json({
+          success: true,
+          message: "Almost there. Submit the authentication code you received.",
+          user: { username: user.username, email: user.email }
+        });
       });
     });
   } else {
-    if (!email) return res.status(400).json({ success: false, message: "Email is required." });
+    // Utente non loggato: ci basiamo solo sulla mail
+    if (!email)
+      return res.status(400).json({ success: false, message: "Email is required." });
 
     const ResetQuery = "SELECT username, email FROM user WHERE email = ?";
     connection.query(ResetQuery, [email], (err, results) => {
@@ -355,64 +387,94 @@ The Blackjack Unipr Team`;
       const user = results[0];
       const reset_code = generate6DigitCode();
 
-      req.session.pendingVerifications.set(user.email, { username: user.username, reset_code });
+      const insertQuery = `
+        INSERT INTO pending_verifications (email, username, code, action_type)
+        VALUES (?, ?, ?, 'reset_password')
+        ON DUPLICATE KEY UPDATE code = VALUES(code), username = VALUES(username), action_type = 'reset_password'
+      `;
+      connection.query(insertQuery, [user.email, user.username, reset_code], (err2) => {
+        if (err2) {
+          console.error(err2);
+          return res.status(500).json({ success: false, message: "Database error during code storage." });
+        }
 
-      const mailOptions3 = {
-        from: 'blackjackunipr@gmail.com',
-        to: user.email,
-        subject: 'Password Reset',
-        text: commonMailText(user.username, reset_code)
-      };
+        const mailOptions3 = {
+          from: 'blackjackunipr@gmail.com',
+          to: user.email,
+          subject: 'Password Reset',
+          text: commonMailText(user.username, reset_code)
+        };
 
-      SendMail(mailOptions3);
-      return res.status(201).json({
-        success: true,
-        message: "Almost there. Submit the authentication code you received.",
-        user: { username: user.username, email: user.email }
+        SendMail(mailOptions3);
+        return res.status(201).json({
+          success: true,
+          message: "Almost there. Submit the authentication code you received.",
+          user: { username: user.username, email: user.email }
+        });
       });
     });
   }
 });
 
+
 app.post("/api/blackjack/confirmreset", (req, res) => {
   const { email, reset_code, new_password } = req.body;
 
-  const pending = req.session.pendingVerifications.get(email);
+  // 1. Cerco la pending reset nel DB
+  connection.query(
+    "SELECT * FROM pending_verifications WHERE email = ? AND code = ? AND action_type = 'reset_password'",
+    [email, reset_code],
+    (err, results) => {
+      if (err) {
+        console.error(err);
+        return res.status(500).json({ success: false, message: "Database error while fetching verification." });
+      }
 
-  if (!pending) {
-    return res.status(400).json({ success: false, message: "No pending verification found for this email." });
-  }
+      if (results.length === 0) {
+        return res.status(400).json({ success: false, message: "No pending verification found for this email or invalid code." });
+      }
 
-  if (pending.reset_code !== reset_code) {
-    return res.status(401).json({ success: false, message: "Invalid verification code." });
-  }
-  const updatePasswordQuery = "UPDATE user SET password = ? WHERE user_id = ?";
+      const pending = results[0];
 
-  connection.query(updatePasswordQuery, [new_password, pending], (err, results) => {
-    if (err) {
-      console.error(err);
-      return res.status(400).json({ success: false, message: "Database error." });
-    }
-    return res.status(200).json({ success: true, message: "Password updated successfully." });
-  });
+      const updatePasswordQuery = "UPDATE user SET password = ? WHERE email = ?";
+      connection.query(updatePasswordQuery, [new_password, email], (err2, results2) => {
+        if (err2) {
+          console.error(err2);
+          return res.status(500).json({ success: false, message: "Database error during password update." });
+        }
 
-  const mailOptions4 = {
-    from: 'blackjackunipr@gmail.com',
-    to: email,
-    subject: 'Password Reset Was Successful!',
-    text: `Hi ${pending.username},
+        connection.query(
+          "DELETE FROM pending_verifications WHERE email = ? AND action_type = 'reset_password'",
+          [email],
+          (err3) => {
+            if (err3) {
+              console.error(err3);
+              // Non blocchiamo la risposta, l'aggiornamento è fatto
+            }
+
+            // 4. Invio mail di conferma
+            const mailOptions4 = {
+              from: 'blackjackunipr@gmail.com',
+              to: email,
+              subject: 'Password Reset Was Successful!',
+              text: `Hi ${pending.username},
 
 Your password has been reset successfully and you are now able to play!
 
 Best regards,  
 The Blackjack Unipr Team`
-  };
+            };
+            SendMail(mailOptions4);
 
-  SendMail(mailOptions4);
-
-  req.session.pendingVerifications.delete(email);
-
+            // 5. Risposta al client
+            return res.status(200).json({ success: true, message: "Password updated successfully." });
+          }
+        );
+      });
+    }
+  );
 });
+
 
 app.post('/api/blackjack/deposit', (req, res) => {
   if (!req.session.IsLogged) {
