@@ -1,4 +1,3 @@
-// src/App.jsx
 import React, { useState, useEffect } from "react";
 import {
   BrowserRouter,
@@ -6,6 +5,7 @@ import {
   Route,
   Navigate,
   useLocation,
+  useNavigate
 } from "react-router-dom";
 import axios from "axios";
 import Navbar from "./components/Navbar";
@@ -17,6 +17,7 @@ import Blackjack from "./components/Blackjack";
 
 function AppRoutes({ user, setUser, canOpenDrawer, setCanOpenDrawer }) {
   const location = useLocation();
+  const navigate = useNavigate();
   const hideNav = ["/login", "/signup"].includes(location.pathname);
 
   return (
@@ -26,8 +27,8 @@ function AppRoutes({ user, setUser, canOpenDrawer, setCanOpenDrawer }) {
           user={user}
           setUser={setUser}
           onLogout={() => {
-            // logout backend session
-            axios.post("/api/blackjack/logout", {}, { withCredentials: true })
+            axios
+              .post("/api/blackjack/logout", {}, { withCredentials: true })
               .then(() => setUser(null));
             setCanOpenDrawer(true);
           }}
@@ -44,9 +45,7 @@ function AppRoutes({ user, setUser, canOpenDrawer, setCanOpenDrawer }) {
 
           <Route
             path="/"
-            element={
-              user ? <Home /> : <Navigate to="/login" replace />
-            }
+            element={user ? <Home /> : <Navigate to="/login" replace />}
           />
           <Route
             path="/profile"
@@ -79,32 +78,53 @@ export default function App() {
   const [canOpenDrawer, setCanOpenDrawer] = useState(true);
   const [loadingSession, setLoadingSession] = useState(true);
 
+  // 1) Carica sessione all'avvio
   useEffect(() => {
-  axios
-    .get("/api/blackjack/me", {
-      withCredentials: true,
-      headers: {
-        "Cache-Control": "no-cache",
-        Pragma: "no-cache",
-        Expires: "0",
-      },
-      params: { t: Date.now() }, // evita cache aggiungendo timestamp
-    })
-    .then((res) => {
-      if (res.data.success) {
-        setUser(res.data.user);
+    axios
+      .get("/api/blackjack/me", {
+        withCredentials: true,
+        headers: {
+          "Cache-Control": "no-cache",
+          Pragma: "no-cache",
+          Expires: "0",
+        },
+        params: { t: Date.now() },
+      })
+      .then((res) => {
+        if (res.data.success) setUser(res.data.user);
+      })
+      .catch(() => setUser(null))
+      .finally(() => setLoadingSession(false));
+  }, []);
+
+  // 2) Logout solo alla chiusura vera della finestra (non su refresh)
+  useEffect(() => {
+    const handleUnload = () => {
+      const navEntries = performance.getEntriesByType("navigation");
+      const navType = navEntries.length > 0 ? navEntries[0].type : null;
+      if (navType !== "reload") {
+        navigator.sendBeacon(
+          "/api/blackjack/logout",
+          new Blob([], { type: "application/json" })
+        );
       }
-    })
-    .catch(() => {
-      setUser(null);
-    })
-    .finally(() => setLoadingSession(false));
-}, []);
+    };
+    window.addEventListener("unload", handleUnload);
+    return () => window.removeEventListener("unload", handleUnload);
+  }, []);
 
+  // 3) Registrazione del Service Worker per Background Sync
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker
+        .register("/sw.js")
+        .then((reg) => console.log("SW registered with scope:", reg.scope))
+        .catch((err) => console.error("SW registration failed:", err));
+    }
+  }, []);
 
-  if (loadingSession) {
-    return null; // oppure uno spinner
-  }
+  // Early return dopo tutti gli hook
+  if (loadingSession) return null;
 
   return (
     <BrowserRouter>

@@ -28,7 +28,9 @@ export default function Blackjack({ onGameOver }) {
     setMessage("");
     try {
       const { data } = await axios.post("/api/blackjack/start", { bet });
-      data.dealer_cards = data.dealer_cards.map(c => ({ ...c, isDealer: true }));
+      if (Array.isArray(data.dealer_cards)) {
+        data.dealer_cards = data.dealer_cards.map(c => ({ ...c, isDealer: true }));
+      }
       setGameState(data);
       setMessage(data.message || "");
       notifyGameOver(false);
@@ -47,7 +49,9 @@ export default function Blackjack({ onGameOver }) {
     setMessage("");
     try {
       const { data } = await axios.post("/api/blackjack/play", { action });
-      data.dealer_cards = data.dealer_cards.map(c => ({ ...c, isDealer: true }));
+      if (Array.isArray(data.dealer_cards)) {
+        data.dealer_cards = data.dealer_cards.map(c => ({ ...c, isDealer: true }));
+      }
       setGameState(data);
       setMessage(data.message || "");
       if (data.Gameover) notifyGameOver(true);
@@ -83,7 +87,6 @@ export default function Blackjack({ onGameOver }) {
   // Rendering player hands: single or split (even after gameover)
   const renderPlayerHands = () => {
     if (!gameState) return null;
-    // If backend returned split data, always display those hands
     if (gameState.first_hand && gameState.second_hand) {
       return [gameState.first_hand, gameState.second_hand].map((handData, idx) => (
         <section key={idx} className="bg-gray-800 rounded shadow p-4 mb-6">
@@ -95,7 +98,6 @@ export default function Blackjack({ onGameOver }) {
         </section>
       ));
     }
-    // Otherwise single hand always
     return (
       <section className="bg-gray-800 rounded shadow p-4 mb-6">
         <h2 className="text-xl text-white mb-2">Giocatore</h2>
@@ -146,7 +148,7 @@ export default function Blackjack({ onGameOver }) {
           <section className="bg-gray-800 rounded shadow p-4 mb-6">
             <h2 className="text-xl text-white mb-2">Banco</h2>
             <div className="flex">{gameState.dealer_cards.map(renderCard)}</div>
-            <p className="text-white mt-2">Punti: {gameState.dealer_score}</p>
+            {gameState.Gameover && <p className="text-white mt-2">Punti: {gameState.dealer_score}</p>}
           </section>
 
           {message && <p className="text-center text-yellow-400 mb-4">{message}</p>}
@@ -161,7 +163,7 @@ export default function Blackjack({ onGameOver }) {
           ) : (
             <div className="flex space-x-2 mb-4">
               <button onClick={replay} disabled={loading} className="flex-1 bg-blue-600 py-2 rounded text-white hover:bg-blue-700">Rigioca Puntata</button>
-              <button onClick={exitGame} className="flex-1 bg-red-600 py-2 rounded text-white hover:bg-red-700">Cambia Puntata</button>
+              <button onClick={exitGame} className="flex-1 bg-red-600 py-2.rounded text-white hover:bg-red-700">Cambia Puntata</button>
             </div>
           )}
         </div>

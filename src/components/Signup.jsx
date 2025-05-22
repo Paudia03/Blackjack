@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 
@@ -14,6 +14,18 @@ export default function Signup({ onRegistered, onCancel }) {
   });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const savedStep = sessionStorage.getItem("signupStep");
+    const savedForm = sessionStorage.getItem("signupForm");
+    if (savedStep) setStep(Number(savedStep));
+    if (savedForm) setForm(JSON.parse(savedForm));
+  }, []);
+
+  useEffect(() => {
+    sessionStorage.setItem("signupStep", step);
+    sessionStorage.setItem("signupForm", JSON.stringify(form));
+  }, [step, form]);
 
   const handleChange = e => {
     setForm({ ...form, [e.target.name]: e.target.value });
@@ -39,7 +51,6 @@ export default function Signup({ onRegistered, onCancel }) {
         },
         { withCredentials: true }
       );
-      // avanzamento alla schermata di conferma
       setStep(2);
     } catch (err) {
       setError(err.response?.data?.message || "Registrazione fallita");
@@ -48,7 +59,21 @@ export default function Signup({ onRegistered, onCancel }) {
     }
   };
 
-  // Schermata finale: istruzioni e torna al login
+  const handleResendOTP = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      await axios.post(
+        "/api/blackjack/resend-code",
+        { email: form.email },
+        { withCredentials: true }
+      );
+    } catch (err) {
+      setError("Errore durante l'invio del codice. Riprova.");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-900 p-4">
@@ -95,9 +120,17 @@ export default function Signup({ onRegistered, onCancel }) {
         ) : (
           <>
             <h2 className="text-2xl font-bold mb-4">Benvenuto!</h2>
-            <p className="mb-6">
+            <p className="mb-4">
               Ti arriverà a breve una mail di conferma con il codice per completare la registrazione.
             </p>
+            {error && <p className="text-red-500 mb-2">{error}</p>}
+            <button
+              onClick={handleResendOTP}
+              disabled={loading}
+              className="w-full mb-4 bg-yellow-600 py-2 rounded hover:bg-yellow-700"
+            >
+              {loading ? "Invio..." : "Reinvia codice"}
+            </button>
             <button
               onClick={onCancel}
               className="w-full bg-green-600 py-2 rounded hover:bg-green-700"
