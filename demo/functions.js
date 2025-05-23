@@ -18,45 +18,6 @@ export function CreateDeck() {
 
     return final_deck;
 }
-export function TestDeck(){
-    return [
-        { suit: "Spades", value: "A" },    // Dealer prima carta -> 11
-        { suit: "Hearts", value: "8" },    // Player prima carta -> 8
-        { suit: "Spades", value: "K" },    // Dealer seconda carta -> 10 -> dealer 21 (blackjack)
-        { suit: "Hearts", value: "8" },    // Player seconda carta -> 8 -> player 16 (poi si splitta)
-    
-        // Split 1 - nuova carta
-        { suit: "Clubs", value: "3" },     // Prima mano split -> 8 + 3 = 11
-    
-        // Split 2 - nuova carta
-        { suit: "Diamonds", value: "3" },  // Seconda mano split -> 8 + 3 = 11
-    
-        // Draw per la prima mano split
-        { suit: "Spades", value: "K" },    // 11 + 10 = 21
-    
-        // Draw per la seconda mano split
-        { suit: "Spades", value: "9" },    // 11 + 9 = 20
-    
-        // Dealer pesca dopo split
-        { suit: "Hearts", value: "5" },    // 21 + 5 = 26 -> bust dealer
-    
-        // Carte per test double
-        { suit: "Diamonds", value: "5" },  // Player carta 5
-        { suit: "Clubs", value: "6" },     // Player carta 6
-        { suit: "Spades", value: "9" },    // Dealer prima carta
-        { suit: "Hearts", value: "7" },    // Dealer seconda carta
-    
-        { suit: "Diamonds", value: "K" },  // Player draw dopo double
-    
-        // Carte per test bust player
-        { suit: "Spades", value: "9" },    // Player carta 9
-        { suit: "Diamonds", value: "8" },  // Player carta 8
-        { suit: "Clubs", value: "5" },     // Player carta 5
-    
-        { suit: "Spades", value: "7" },    // Dealer carta 7
-        { suit: "Hearts", value: "6" },    // Dealer carta 6
-      ];
-}
 export function ShuffleDeck(deck) {
     for (let i = deck.length - 1; i > 0; i--) {
         const j = Math.floor(Math.random() * (i + 1));
