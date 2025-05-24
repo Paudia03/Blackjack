@@ -11,14 +11,17 @@ import axios from "axios";
 import Navbar from "./components/Navbar";
 import Login from "./components/Login";
 import Signup from "./components/Signup";
+import ResetPassword from "./components/ResetPassword";  // Added reset password import
 import Profile from "./components/Profile";
 import Home from "./components/Home";
 import Blackjack from "./components/Blackjack";
+import ChangePassword from "./components/ChangePassword";
+
 
 function AppRoutes({ user, setUser, canOpenDrawer, setCanOpenDrawer }) {
   const location = useLocation();
   const navigate = useNavigate();
-  const hideNav = ["/login", "/signup"].includes(location.pathname);
+  const hideNav = ["/login", "/signup", "/password-reset"].includes(location.pathname);
 
   return (
     <>
@@ -42,7 +45,13 @@ function AppRoutes({ user, setUser, canOpenDrawer, setCanOpenDrawer }) {
             path="/signup"
             element={<Signup onRegistered={setUser} onCancel={() => navigate("/login")} />}
           />
-
+          {/* New reset password route */}
+          <Route
+            path="/password-reset"
+            element={
+              <ResetPassword onCancel={() => navigate("/login")} />
+            }
+          />
           <Route
             path="/"
             element={user ? <Home /> : <Navigate to="/login" replace />}
@@ -65,9 +74,12 @@ function AppRoutes({ user, setUser, canOpenDrawer, setCanOpenDrawer }) {
                 <Navigate to="/login" replace />
               )
             }
+            
           />
           <Route path="*" element={<Navigate to={user ? "/" : "/login"} replace />} />
+           <Route path="/change-password" element={user ? <ChangePassword userEmail={user.email} /> : <Navigate to="/login" replace />}/>
         </Routes>
+       
       </div>
     </>
   );

@@ -313,103 +313,96 @@ app.post("/api/blackjack/logout", (req, res) => {
   return res.status(200).json({ success: true, message: "Logout successful", LoggedUser: req.session.IsLogged });
 });
 
-app.post("/api/blackjack/passwordreset", (req, res) => {
-  const { password_tochange, email } = req.body;
+function commonMailText(username, code, isChange) {
+  const action = isChange ? 'change' : 'reset';
+  return `Hi ${username},
 
-  const commonMailText = (username, reset_code) => `Hi ${username},
+Here’s the 6-digit code to ${action} your password:
 
-We're sorry that you lost your password, please contact support :(
+${code}
 
-To complete your password reset, please enter the following 6-digit verification code:
+Enter this code in the app to continue. If you didn’t request this, just ignore this message.
 
-${reset_code}
-
-This code is valid forever and is required to reset your password.
-
-If you didn't request this, please ignore this message.
-
-Best regards,  
+Thank you,  
 The Blackjack Unipr Team`;
+}
 
-  if (req.session.IsLogged != null) {
-    const ResetQuery = "SELECT username, email, password FROM user WHERE user_id = ?";
-    connection.query(ResetQuery, [req.session.IsLogged], (err, results) => {
+app.post("/api/blackjack/passwordreset", (req, res) => {
+  const isLoggedIn = !!req.session.IsLogged;
+  const userId     = req.session.IsLogged;
+
+  // Recupera username ed email in base allo stato di login
+  if (isLoggedIn) {
+    const query = "SELECT username, email FROM user WHERE user_id = ?";
+    connection.query(query, [userId], (err, results) => {
       if (err) return res.status(500).json({ success: false, message: "Database error." });
+      if (results.length === 0) return res.status(404).json({ success: false, message: "User not found." });
 
-      if (results.length === 0)
-        return res.status(404).json({ success: false, message: "User not found." });
+      const { username, email } = results[0];
+      const code = generate6DigitCode();
 
-      const user = results[0];
-
-      if (password_tochange !== user.password)
-        return res.status(401).json({ success: false, message: "Wrong Password." });
-
-      const reset_code = generate6DigitCode();
-
-      const insertQuery = `
+      const sql = `
         INSERT INTO pending_verifications (email, username, code, action_type)
         VALUES (?, ?, ?, 'reset_password')
-        ON DUPLICATE KEY UPDATE code = VALUES(code), username = VALUES(username), action_type = 'reset_password'
+        ON DUPLICATE KEY UPDATE
+          code        = VALUES(code),
+          username    = VALUES(username),
+          action_type = 'reset_password'
       `;
-      connection.query(insertQuery, [user.email, user.username, reset_code], (err2) => {
-        if (err2) {
-          console.error(err2);
-          return res.status(500).json({ success: false, message: "Database error during code storage." });
-        }
+      connection.query(sql, [email, username, code], (err2) => {
+        if (err2) return res.status(500).json({ success: false, message: "Database error storing code." });
 
-        const mailOptions3 = {
+        const mailOptions = {
           from: 'blackjackunipr@gmail.com',
-          to: user.email,
-          subject: 'Password Reset',
-          text: commonMailText(user.username, reset_code)
+          to: email,
+          subject: 'Your Verification Code',
+          text: commonMailText(username, code, true)
         };
+        SendMail(mailOptions);
 
-        SendMail(mailOptions3);
         return res.status(201).json({
           success: true,
           message: "Almost there. Submit the authentication code you received.",
-          user: { username: user.username, email: user.email }
+          user: { username, email }
         });
       });
     });
+
   } else {
-    // Utente non loggato: ci basiamo solo sulla mail
-    if (!email)
-      return res.status(400).json({ success: false, message: "Email is required." });
+    const { email } = req.body;
+    if (!email) return res.status(400).json({ success: false, message: "Email is required." });
 
-    const ResetQuery = "SELECT username, email FROM user WHERE email = ?";
-    connection.query(ResetQuery, [email], (err, results) => {
+    const query = "SELECT username, email FROM user WHERE email = ?";
+    connection.query(query, [email], (err, results) => {
       if (err) return res.status(500).json({ success: false, message: "Database error." });
+      if (results.length === 0) return res.status(404).json({ success: false, message: "Email not found." });
 
-      if (results.length === 0)
-        return res.status(404).json({ success: false, message: "Email not found." });
+      const { username, email: foundEmail } = results[0];
+      const code = generate6DigitCode();
 
-      const user = results[0];
-      const reset_code = generate6DigitCode();
-
-      const insertQuery = `
+      const sql = `
         INSERT INTO pending_verifications (email, username, code, action_type)
         VALUES (?, ?, ?, 'reset_password')
-        ON DUPLICATE KEY UPDATE code = VALUES(code), username = VALUES(username), action_type = 'reset_password'
+        ON DUPLICATE KEY UPDATE
+          code        = VALUES(code),
+          username    = VALUES(username),
+          action_type = 'reset_password'
       `;
-      connection.query(insertQuery, [user.email, user.username, reset_code], (err2) => {
-        if (err2) {
-          console.error(err2);
-          return res.status(500).json({ success: false, message: "Database error during code storage." });
-        }
+      connection.query(sql, [foundEmail, username, code], (err2) => {
+        if (err2) return res.status(500).json({ success: false, message: "Database error storing code." });
 
-        const mailOptions3 = {
+        const mailOptions = {
           from: 'blackjackunipr@gmail.com',
-          to: user.email,
-          subject: 'Password Reset',
-          text: commonMailText(user.username, reset_code)
+          to: foundEmail,
+          subject: 'Your Verification Code',
+          text: commonMailText(username, code, false)
         };
+        SendMail(mailOptions);
 
-        SendMail(mailOptions3);
         return res.status(201).json({
           success: true,
           message: "Almost there. Submit the authentication code you received.",
-          user: { username: user.username, email: user.email }
+          user: { username, email: foundEmail }
         });
       });
     });

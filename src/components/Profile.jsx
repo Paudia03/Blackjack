@@ -99,7 +99,7 @@ export default function Profile({ user, setUser }) {
                   {message && <p className="text-yellow-400 mt-2 animate-pulse">{message}</p>}
                 </div>
                 <button
-                  onClick={() => navigate('/password-reset')}
+                 onClick={() => navigate('/change-password')}
                   className="mt-8 w-full bg-blue-600 py-3 rounded-full text-white font-semibold hover:bg-blue-700 transition"
                 >
                   Cambia Password

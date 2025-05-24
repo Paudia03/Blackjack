@@ -1,4 +1,3 @@
-// src/components/Login.jsx
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Signup from "./Signup";
@@ -28,15 +27,15 @@ export default function Login({ setUser }) {
     setLoading(true);
 
     try {
-      // prima il login
       let userData;
       if (email === FAKE_EMAIL && password === FAKE_PASSWORD) {
         userData = { username: "Demo User", balance: 1000 };
       } else {
-        const res = await axios.post("/api/blackjack/login", {
-          identifier: email,
-          password,
-        });
+        const res = await axios.post(
+          "/api/blackjack/login",
+          { identifier: email, password },
+          { withCredentials: true }
+        );
         if (!res.data.success) {
           setError(res.data.message);
           setLoading(false);
@@ -45,10 +44,7 @@ export default function Login({ setUser }) {
         userData = res.data.user;
       }
 
-      // inizializzo la sessione sul server
-      await axios.post("/api/blackjack/init");
-
-      // salvo lo user in App.jsx e navigo
+      await axios.post("/api/blackjack/init", {}, { withCredentials: true });
       setUser(userData);
       navigate("/", { replace: true });
 
@@ -111,9 +107,19 @@ export default function Login({ setUser }) {
           </button>
         </form>
 
+        {/* Link password dimenticata */}
+        <div className="mt-4 text-center">
+          <button
+            onClick={() => navigate('/password-reset')}
+            className="text-gray-400 hover:underline text-sm"
+          >
+            Password dimenticata?
+          </button>
+        </div>
+
         <div className="mt-4 text-center">
           <p className="text-gray-400">
-            Non hai un account?{" "}
+            Non hai un account?{' '}
             <button
               onClick={() => setShowSignup(true)}
               disabled={loading}
