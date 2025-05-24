@@ -3,10 +3,11 @@ import React, { useState, useEffect } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 
-export default function ChangePassword({ userEmail }) {
+export default function ChangePassword({ userEmail: propUserEmail }) {
   const navigate = useNavigate();
 
-  // Stato
+  // Stati
+  const [email, setEmail] = useState(propUserEmail || "");
   const [otp, setOtp] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [repeatPassword, setRepeatPassword] = useState("");
@@ -14,16 +15,15 @@ export default function ChangePassword({ userEmail }) {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // 1) Funzione hoisted per inviare/reinviare OTP
-  async function sendOtp() {
-    if (!userEmail) return;
+  // Funzione per inviare/reinviare OTP
+  async function sendOtp(mail) {
+    if (!mail) return;
     setMessage("");
     setLoading(true);
     try {
-      await axios.get("/api/blackjack/me");
       const res = await axios.post(
         "/api/blackjack/passwordreset",
-        { email: userEmail },
+        { email: mail },
         { withCredentials: true }
       );
       if (res.data.success) {
@@ -39,12 +39,26 @@ export default function ChangePassword({ userEmail }) {
     }
   }
 
-  // 2) Invio OTP automatico all'avvio, se c'è userEmail
+  // Al mount, recupero email se non passata e invio OTP
   useEffect(() => {
-    if (userEmail) sendOtp();
-  }, [userEmail]);
+    (async () => {
+      let mail = propUserEmail;
+      if (!mail) {
+        try {
+          const res = await axios.get("/api/blackjack/me", { withCredentials: true });
+          mail = res.data.user.email;
+        } catch {
+          setMessage("Impossibile recuperare email");
+          return;
+        }
+      }
+      setEmail(mail);
+      await sendOtp(mail);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  // 3) Verifica OTP e cambio password
+  // Conferma OTP e cambio password
   async function handleConfirm() {
     if (!otp.trim()) {
       setMessage("Inserisci l'OTP ricevuto");
@@ -60,14 +74,14 @@ export default function ChangePassword({ userEmail }) {
       const res = await axios.post(
         "/api/blackjack/confirmreset",
         {
-          email: userEmail,
+          email,
           reset_code: otp.trim(),
           new_password: newPassword
         },
         { withCredentials: true }
       );
       if (res.data.success) {
-        setMessage("Cambio password avvenuto con successo, riceverai una e-mail di conferma");
+        setMessage("Cambio password avvenuto con successo");
       } else {
         setMessage(res.data.message || "Errore durante il cambio password");
       }
@@ -83,11 +97,9 @@ export default function ChangePassword({ userEmail }) {
       <div className="bg-gray-800 p-8 rounded shadow-md w-full max-w-md text-white space-y-6">
         <h2 className="text-2xl font-bold text-center">Cambia Password</h2>
         <p className="text-gray-400">
-          Email associata: <span className="text-white">{userEmail}</span>
+          Email associata: <span className="text-white">{email}</span>
         </p>
-        {message && (
-          <p className="text-yellow-400 text-center">{message}</p>
-        )}
+        {message && <p className="text-yellow-400 text-center">{message}</p>}
 
         <div>
           <label className="block text-gray-300 mb-2">OTP:</label>
@@ -99,6 +111,16 @@ export default function ChangePassword({ userEmail }) {
             className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded text-white"
             placeholder="Inserisci codice"
           />
+        </div>
+
+        <div className="flex space-x-2">
+          <button
+            onClick={() => sendOtp(email)}
+            disabled={loading}
+            className="flex-1 bg-yellow-600 py-2 rounded hover:bg-yellow-700 transition"
+          >
+            {loading ? "Reinvio..." : "Reinvia OTP"}
+          </button>
         </div>
 
         <div>
@@ -125,22 +147,13 @@ export default function ChangePassword({ userEmail }) {
           />
         </div>
 
-        <div className="flex space-x-2">
-          <button
-            onClick={sendOtp}
-            disabled={loading}
-            className="flex-1 bg-yellow-600 py-2 rounded hover:bg-yellow-700 transition"
-          >
-            {loading ? "Reinvio..." : "Reinvia OTP"}
-          </button>
-          <button
-            onClick={handleConfirm}
-            disabled={loading}
-            className="flex-1 bg-green-600 py-2 rounded hover:bg-green-700 transition"
-          >
-            {loading ? "Confermo..." : "Conferma Cambio"}
-          </button>
-        </div>
+        <button
+          onClick={handleConfirm}
+          disabled={loading}
+          className="w-full bg-green-600 py-2 rounded hover:bg-green-700 transition"
+        >
+          {loading ? "Confermo..." : "Conferma Cambio"}
+        </button>
 
         <button
           onClick={() => navigate(-1)}

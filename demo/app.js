@@ -92,9 +92,6 @@ function SendMail(mailoptions) {
   });
 }
 
-
-
-
 app.post("/api/blackjack/init", (req, res) => {
     console.log("INIT chiamato");
     console.log("Session:", req.session);
@@ -102,8 +99,6 @@ app.post("/api/blackjack/init", (req, res) => {
         return res.status(401).json({ error: "No user logged" });
     }
     else {
-        req.session.deck = [];
-        req.session.shuffled = [];
         req.session.dealer_card = null;
         req.session.player_card = null; 
         req.session.dealer_second_card = null;
@@ -126,11 +121,14 @@ app.post("/api/blackjack/init", (req, res) => {
         req.session.current_split = 1;
         req.session.isSplit = false;
         req.session.dealer_first_value = 0;
-        req.session.deck = CreateDeck();
-        req.session.shuffled = ShuffleDeck(req.session.deck);
         req.session.message = "";
-        return res.status(200).json({ message: "Sessione inizializzata" });
+        return res.status(200).json({ message: "sessione di gioco inizializzata" });
     }
+});
+
+app.post("/api/blackjack/deck", (req,res)=> {
+    req.session.deck = CreateDeck();
+    req.session.shuffled = ShuffleDeck(req.session.deck);
 });
 
 app.post("/api/blackjack/signup", (req, res) => {
@@ -411,12 +409,11 @@ app.post("/api/blackjack/passwordreset", (req, res) => {
 
 
 app.post("/api/blackjack/confirmreset", (req, res) => {
-  const { email, reset_code, new_password } = req.body;
+  const { reset_code, new_password } = req.body;
 
-  // 1. Cerco la pending reset nel DB
   connection.query(
-    "SELECT * FROM pending_verifications WHERE email = ? AND code = ? AND action_type = 'reset_password'",
-    [email, reset_code],
+    "SELECT * FROM pending_verifications WHERE code = ? AND action_type = 'reset_password'",
+    [reset_code],
     (err, results) => {
       if (err) {
         console.error(err);
@@ -430,7 +427,7 @@ app.post("/api/blackjack/confirmreset", (req, res) => {
       const pending = results[0];
 
       const updatePasswordQuery = "UPDATE user SET password = ? WHERE email = ?";
-      connection.query(updatePasswordQuery, [new_password, email], (err2, results2) => {
+      connection.query(updatePasswordQuery, [new_password, pending.email], (err2, results2) => {
         if (err2) {
           console.error(err2);
           return res.status(500).json({ success: false, message: "Database error during password update." });
@@ -438,7 +435,7 @@ app.post("/api/blackjack/confirmreset", (req, res) => {
 
         connection.query(
           "DELETE FROM pending_verifications WHERE email = ? AND action_type = 'reset_password'",
-          [email],
+          [pending.email],
           (err3) => {
             if (err3) {
               console.error(err3);
@@ -448,7 +445,7 @@ app.post("/api/blackjack/confirmreset", (req, res) => {
             // 4. Invio mail di conferma
             const mailOptions4 = {
               from: 'blackjackunipr@gmail.com',
-              to: email,
+              to: pending.email,
               subject: 'Password Reset Was Successful!',
               text: `Hi ${pending.username},
 
@@ -670,6 +667,7 @@ app.post("/api/blackjack/play", (req, res) => {
                     req.session.dealer_score += Value(req.session.dealer_next_card);
                     req.session.dealer_score = adjustForAces(req.session.dealer_cards, req.session.dealer_score);
                 }
+                console.log(req.session.dealer_cards);
                 const result = Win(req.session.player_score, req.session.dealer_score, req.session.player_blackjack, req.session.dealer_blackjack);
                 switch (result) {
                     case 1:
