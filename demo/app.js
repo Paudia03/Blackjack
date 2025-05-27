@@ -129,6 +129,7 @@ app.post("/api/blackjack/init", (req, res) => {
 app.post("/api/blackjack/deck", (req,res)=> {
     req.session.deck = CreateDeck();
     req.session.shuffled = ShuffleDeck(req.session.deck);
+    res.json({ success: true });
 });
 
 app.post("/api/blackjack/signup", (req, res) => {
@@ -623,8 +624,8 @@ app.post("/api/blackjack/play", (req, res) => {
                         checkAndReshuffleDeck(req);
                         req.session.dealer_next_card = req.session.shuffled.shift();
                         req.session.dealer_cards.push(req.session.dealer_next_card);
-                        req.session.dealer_score += Value(req.session.dealer_next_card);
-                        req.session.dealer_score = adjustForAces(req.session.dealer_cards, req.session.dealer_score);
+                        let rawScore = req.session.dealer_cards.reduce((sum, card) => sum + Value(card), 0);
+                        req.session.dealer_score = adjustForAces(req.session.dealer_cards, rawScore);
                     }
                     let result1 = Win(req.session.split_score_1, req.session.dealer_score, false, req.session.dealer_blackjack);
                     let result2 = Win(req.session.split_score_2, req.session.dealer_score, false, req.session.dealer_blackjack);
@@ -664,8 +665,8 @@ app.post("/api/blackjack/play", (req, res) => {
                     checkAndReshuffleDeck(req);
                     req.session.dealer_next_card = req.session.shuffled.shift();
                     req.session.dealer_cards.push(req.session.dealer_next_card);
-                    req.session.dealer_score += Value(req.session.dealer_next_card);
-                    req.session.dealer_score = adjustForAces(req.session.dealer_cards, req.session.dealer_score);
+                    let rawScore = req.session.dealer_cards.reduce((sum, card) => sum + Value(card), 0);
+                    req.session.dealer_score = adjustForAces(req.session.dealer_cards, rawScore);
                 }
                 console.log(req.session.dealer_cards);
                 const result = Win(req.session.player_score, req.session.dealer_score, req.session.player_blackjack, req.session.dealer_blackjack);
@@ -690,13 +691,15 @@ app.post("/api/blackjack/play", (req, res) => {
             break;
 
         case "hit":
+            console.log("carte rimanenti:");
+            console.log(req.session.shuffled.length);
             if (req.session.isSplit) {
                 const activeHand = req.session.current_split === 1 ? req.session.split_hand : req.session.split_second_hand;
                 let activeScore = req.session.current_split === 1 ? req.session.split_score_1 : req.session.split_score_2;
                 req.session.player_next_card = req.session.shuffled.shift();
                 activeHand.push(req.session.player_next_card);
-                activeScore += Value(req.session.player_next_card);
-                activeScore = adjustForAces(activeHand, activeScore)
+                let rawScore = activeHand.reduce((sum, card) => sum + Value(card), 0);
+                activeScore = adjustForAces(activeHand, rawScore);
                 if (req.session.current_split === 1) req.session.split_score_1 = activeScore;
                 else req.session.split_score_2 = activeScore;
                 responseData = updateResponseData(req);
@@ -710,8 +713,8 @@ app.post("/api/blackjack/play", (req, res) => {
                             checkAndReshuffleDeck(req);
                             req.session.dealer_next_card = req.session.shuffled.shift();
                             req.session.dealer_cards.push(req.session.dealer_next_card);
-                            req.session.dealer_score += Value(req.session.dealer_next_card);
-                            req.session.dealer_score = adjustForAces(req.session.dealer_cards, req.session.dealer_score);
+                            let rawScore = req.session.dealer_cards.reduce((sum, card) => sum + Value(card), 0);
+                            req.session.dealer_score = adjustForAces(req.session.dealer_cards, rawScore);
                         }
                         let result1 = Win(req.session.split_score_1, req.session.dealer_score, false, req.session.dealer_blackjack);
                         let result2 = Win(req.session.split_score_2, req.session.dealer_score, false, req.session.dealer_blackjack);
@@ -750,8 +753,8 @@ app.post("/api/blackjack/play", (req, res) => {
             } else {
                 req.session.player_next_card = req.session.shuffled.shift();
                 req.session.player_cards.push(req.session.player_next_card);
-                req.session.player_score += Value(req.session.player_next_card);
-                req.session.player_score = adjustForAces(req.session.player_cards, req.session.player_score);
+                let rawScore = req.session.player_cards.reduce((sum, card) => sum + Value(card), 0);
+                req.session.player_score = adjustForAces(req.session.player_cards, rawScore);
                 responseData = updateResponseData(req);
                 if (req.session.player_score > 21) {
                     req.session.GameOver = true;
@@ -771,8 +774,8 @@ app.post("/api/blackjack/play", (req, res) => {
             req.session.player_bet *= 2;
             req.session.player_next_card = req.session.shuffled.shift();
             req.session.player_cards.push(req.session.player_next_card);
-            req.session.player_score += Value(req.session.player_next_card);
-            req.session.player_score = adjustForAces(req.session.player_cards, req.session.player_score);
+            let rawScore = req.session.player_cards.reduce((sum, card) => sum + Value(card), 0);
+            req.session.player_score = adjustForAces(req.session.player_cards, rawScore);
             responseData = updateResponseData(req);
             if (req.session.player_score > 21) {
                 req.session.GameOver = true;
@@ -785,8 +788,8 @@ app.post("/api/blackjack/play", (req, res) => {
                 checkAndReshuffleDeck(req);
                 req.session.dealer_next_card = req.session.shuffled.shift();
                 req.session.dealer_cards.push(req.session.dealer_next_card);
-                req.session.dealer_score += Value(req.session.dealer_next_card);
-                req.session.dealer_score = adjustForAces(req.session.dealer_cards, req.session.dealer_score);
+                let rawScore = req.session.dealer_cards.reduce((sum, card) => sum + Value(card), 0);
+                req.session.dealer_score = adjustForAces(req.session.dealer_cards, rawScore);
             }
             const result_double = Win(req.session.player_score, req.session.dealer_score, req.session.player_blackjack, req.session.dealer_blackjack);
             switch (result_double) {

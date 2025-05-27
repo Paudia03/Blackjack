@@ -26,21 +26,18 @@ export function ShuffleDeck(deck) {
     return deck;
 }
 
-export function Value(deck_card){
-    let value;
-    let card = deck_card.value;
-    if (card == "J" || card == "Q" || card == "K" ) {
-        value = 10;
-    }
-    else if (card == "A") {
-        value = 11;
-    }
-    else {
-        value = parseInt(card);
-    }
-
-    return value;
+export function Value(card) {
+  const val = card.value;
+  if (val === 'A') return 11;
+  if (['K', 'Q', 'J'].includes(val)) return 10;
+  const parsed = parseInt(val);
+  if (isNaN(parsed)) {
+    console.warn("Valore carta non valido:", val);
+    return 0;
+  }
+  return parsed;
 }
+
 
 export function Dealer_check(val){
     if ( val < 17) {
