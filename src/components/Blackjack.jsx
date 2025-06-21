@@ -37,6 +37,19 @@ useEffect(() => {
     notifyGameOver(true);
   };
 
+  const initializeGame = async () => {
+  setLoading(true);
+  setMessage("");
+  try {
+    await axios.post("/api/blackjack/deck");
+    await startGame();
+  } catch (err) {
+    setMessage("Errore inizializzazione mazzo");
+  } finally {
+    setLoading(false);
+  }
+};
+
   const startGame = async () => {
     const bet = parseFloat(betInput);
     if (isNaN(bet) || bet <= 0) {
@@ -151,7 +164,7 @@ useEffect(() => {
         <div className="max-w-sm mx-auto bg-gray-800 p-6 rounded shadow">
           <label className="block text-gray-300 mb-2">Puntata:</label>
           <input type="number" value={betInput} onChange={e => setBetInput(e.target.value)} disabled={loading} className="w-full px-3 py-2 mb-4 bg-gray-700 border border-gray-600 rounded text-white" />
-          <button onClick={startGame} disabled={loading} className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">{loading ? "Caricamento..." : "Inizia Partita"}</button>
+          <button onClick={initializeGame} disabled={loading} className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700">{loading ? "Caricamento..." : "Inizia Partita"}</button>
           {message && <p className="text-red-500 mt-2">{message}</p>}
         </div>
       ) : (
