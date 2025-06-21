@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import axios from "axios";
 
 export default function Blackjack({ onGameOver }) {
@@ -7,6 +7,25 @@ export default function Blackjack({ onGameOver }) {
   const [message, setMessage]     = useState("");
   const [loading, setLoading]     = useState(false);
   const [showLowBalanceModal, setShowLowBalanceModal] = useState(false);
+
+useEffect(() => {
+  (async () => {
+    try {
+      await axios.post("/api/blackjack/init", {}, { withCredentials: true });
+      notifyGameOver(true);
+    } catch (err) {
+      console.error("Init failed:", err);
+    }
+  })();
+
+  const handleBeforeUnload = (e) => {
+    e.preventDefault();
+    e.returnValue = "Sei sicuro di aggiornare la pagina? Perderai la mano.";
+    notifyGameOver(true);
+  };
+  window.addEventListener("beforeunload", handleBeforeUnload);
+  return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+}, []);
 
   const notifyGameOver = (over) => onGameOver(over);
 

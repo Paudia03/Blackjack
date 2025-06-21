@@ -11,10 +11,6 @@ export default function Login({ setUser }) {
   const [showSignup, setShowSignup] = useState(false);
   const [loading, setLoading]       = useState(false);
 
-  // Fake credentials
-  const FAKE_EMAIL    = "test@example.com";
-  const FAKE_PASSWORD = "1234";
-
   const handleRegistered = user => {
     setShowSignup(false);
     setError("Registrazione completata! Effettua il login.");
@@ -28,9 +24,6 @@ export default function Login({ setUser }) {
 
     try {
       let userData;
-      if (email === FAKE_EMAIL && password === FAKE_PASSWORD) {
-        userData = { username: "Demo User", balance: 1000 };
-      } else {
         const res = await axios.post(
           "/api/blackjack/login",
           { identifier: email, password },
@@ -40,7 +33,7 @@ export default function Login({ setUser }) {
           setError(res.data.message);
           setLoading(false);
           return;
-        }
+  
         userData = res.data.user;
       }
 
@@ -127,9 +120,6 @@ export default function Login({ setUser }) {
             >
               Registrati
             </button>
-          </p>
-          <p className="mt-2 text-gray-500 text-sm">
-            Oppure usa <code>test@example.com</code> / <code>1234</code>
           </p>
         </div>
       </div>

@@ -6,6 +6,7 @@ import connection from "./db_connection.js";
 import crypto from 'crypto';
 import validator from "validator";
 import nodemailer from 'nodemailer';
+import bcrypt from 'bcrypt';
 import sessionMiddleware from "./session.js";
 
 const PORT = 3000;
@@ -31,6 +32,88 @@ function generate6DigitCode() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
+const updateMatchHistory = (connection, session, callback) => {
+  const userId = session.IsLogged;
+  const isSplit = session.Split_action;
+  const originalBet = session.player_bet;
+  const doubleDown = session.double_down || false;
+  const bet = doubleDown ? originalBet * 2 : originalBet;
+
+  let result;
+  let net = 0;
+  let splitResult1 = null;
+  let splitResult2 = null;
+  let isBlackjack = false;
+
+  const evaluate = (player, dealer) => {
+    if (player > 21) return 'lose';
+    if (dealer > 21) return 'win';
+    if (player > dealer) return 'win';
+    if (player < dealer) return 'lose';
+    return 'draw';
+  };
+
+  if (isSplit) {
+    splitResult1 = evaluate(session.split_score_1, session.dealer_score);
+    splitResult2 = evaluate(session.split_score_2, session.dealer_score);
+
+    const calc = (res) => {
+      if (res === 'win') return originalBet;
+      if (res === 'lose') return -originalBet;
+      return 0;
+    };
+
+    net = calc(splitResult1) + calc(splitResult2);
+
+    result = (splitResult1 === 'win' || splitResult2 === 'win') ? 'win' :
+             (splitResult1 === 'draw' && splitResult2 === 'draw') ? 'draw' :
+             'lose';
+
+  } else {
+    result = evaluate(session.player_score, session.dealer_score);
+
+    if (session.player_blackjack && !session.dealer_blackjack && session.player_cards?.length === 2) {
+      result = 'win';
+      net = originalBet * 1.5;
+      isBlackjack = true;
+    } else if (result === 'win') {
+      net = bet;
+    } else if (result === 'lose') {
+      net = -bet;
+    } else {
+      net = 0;
+    }
+  }
+
+  const query = `
+    INSERT INTO match_history (
+      user_id, bet, result, is_split, split_result_1, split_result_2, net_earning, blackjack, double_down
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `;
+
+  const values = [
+    userId,
+    bet,
+    result,
+    isSplit,
+    isSplit ? splitResult1 : null,
+    isSplit ? splitResult2 : null,
+    net,
+    isBlackjack,
+    doubleDown
+  ];
+
+  connection.query(query, values, (err, results) => {
+    if (err) {
+      console.error("Error while saving match history", err);
+      if (callback) callback(err);
+    } else {
+      console.log("Match history saved.");
+      if (callback) callback(null, results);
+    }
+  });
+};
+
 function generateShortID() {
   return crypto.randomBytes(8).toString('hex');
 }
@@ -52,25 +135,40 @@ function checkAndReshuffleDeck(req) {
 }
 
 function updateResponseData(req) {
+  const session = req.session || {};
+  const dealer_cards   = Array.isArray(session.dealer_cards)   ? session.dealer_cards   : [];
+  const player_cards   = Array.isArray(session.player_cards)   ? session.player_cards   : [];
+  const shuffled       = Array.isArray(session.shuffled)       ? session.shuffled       : [];
+  const split_hand     = Array.isArray(session.split_hand)     ? session.split_hand     : [];
+  const split_second   = Array.isArray(session.split_second_hand) ? session.split_second_hand : [];
+
   return {
-    message: req.session.message,
-    dealer_cards: req.session.dealer_cards,
-    dealer_score: req.session.dealer_score,
-    dealer_first_card_value: req.session.dealer_cards.length > 0 ? Value(req.session.dealer_cards[0]) : 0,
-    player_cards: req.session.player_cards,
-    player_score: req.session.player_score,
-    your_balance: req.session.balance,
-    your_bet: req.session.player_bet,
-    remaining_cards: req.session.shuffled.length,
-    Gameover: req.session.GameOver,
-    isSplit: req.session.isSplit,
-    first_hand: req.session.isSplit ? { cards: req.session.split_hand, score: req.session.split_score_1 } : null,
-    second_hand: req.session.isSplit ? { cards: req.session.split_second_hand, score: req.session.split_score_2 } : null,
-    active_hand: req.session.isSplit ? req.session.current_split : null,
-    split_bet: req.session.split_bet,
-    dealer_blackjack: req.session.dealer_blackjack,
-    player_blackjack: req.session.player_blackjack,
-    Split_action: req.session.Split_action
+    message:                session.message,
+    dealer_cards:           dealer_cards,
+    dealer_score:           session.dealer_score,
+    dealer_first_card_value: dealer_cards.length > 0
+                              ? Value(dealer_cards[0])
+                              : 0,
+    player_cards:           player_cards,
+    player_score:           session.player_score,
+    your_balance:           session.balance,
+    your_bet:               session.player_bet,
+    remaining_cards:        shuffled.length,
+    Gameover:               session.GameOver,
+    isSplit:                session.isSplit,
+    first_hand:             session.isSplit
+                              ? { cards: split_hand, score: session.split_score_1 }
+                              : null,
+    second_hand:            session.isSplit
+                              ? { cards: split_second, score: session.split_score_2 }
+                              : null,
+    active_hand:            session.isSplit
+                              ? session.current_split
+                              : null,
+    split_bet:              session.split_bet,
+    dealer_blackjack:       session.dealer_blackjack,
+    player_blackjack:       session.player_blackjack,
+    Split_action:           session.Split_action
   };
 }
 
@@ -122,6 +220,8 @@ app.post("/api/blackjack/init", (req, res) => {
         req.session.isSplit = false;
         req.session.dealer_first_value = 0;
         req.session.message = "";
+        req.session.GameOver = true;
+        req.session.double_down = false;
         return res.status(200).json({ message: "sessione di gioco inizializzata" });
     }
 });
@@ -156,6 +256,7 @@ app.post("/api/blackjack/signup", (req, res) => {
       }
 
       const code = generate6DigitCode();
+    const hashedPassword = bcrypt.hashSync(password, 12);
       const sql = `
         INSERT INTO pending_verifications 
           (email, username, password, code, action_type)
@@ -167,7 +268,7 @@ app.post("/api/blackjack/signup", (req, res) => {
       `;
       connection.query(
         sql,
-        [email, username, password, code],
+        [email, username, hashedPassword, code],
         (err2) => {
           if (err2) {
             console.error(err2);
@@ -284,7 +385,7 @@ app.post("/api/blackjack/login", (req, res) => {
 
     const user = results[0];
 
-    if (password == user.password){
+    if (bcrypt.compareSync(password, user.password)){
       req.session.balance = user.wallet;
       req.session.IsLogged = user.user_id;
       req.session.GameOver = true;
@@ -305,11 +406,25 @@ app.post("/api/blackjack/login", (req, res) => {
 
 });
 
-app.post("/api/blackjack/logout", (req, res) => {
+app.post("/api/blackjack/logout", (req, res, next) => {
+  // reset custom session vars
   req.session.IsLogged = null;
   req.session.balance = 0;
-  return res.status(200).json({ success: true, message: "Logout successful", LoggedUser: req.session.IsLogged });
+
+  // destroy the session in the store
+  req.session.destroy(err => {
+    if (err) return next(err);
+    // clear the session cookie on the client
+    res.clearCookie('connect.sid');
+    // send response
+    return res.status(200).json({
+      success: true,
+      message: "Logout successful",
+      LoggedUser: null
+    });
+  });
 });
+
 
 function commonMailText(username, code, isChange) {
   const action = isChange ? 'change' : 'reset';
@@ -576,6 +691,11 @@ app.post("/api/blackjack/start", (req, res) => {
         req.session.dealer_first_value = Value(req.session.dealer_card);
         req.session.player_score = Value(req.session.player_card) + Value(req.session.player_second_card);
         req.session.dealer_score = req.session.dealer_first_value + Value(req.session.dealer_second_card);
+        const rawPlayerScore = Value(req.session.player_card) + Value(req.session.player_second_card);
+req.session.player_score = adjustForAces(req.session.player_cards, rawPlayerScore);
+
+const rawDealerScore = req.session.dealer_first_value + Value(req.session.dealer_second_card);
+req.session.dealer_score = adjustForAces(req.session.dealer_cards, rawDealerScore);
         req.session.player_blackjack = (req.session.player_score === 21);
         req.session.dealer_blackjack = (req.session.dealer_score === 21);
         responseData = updateResponseData(req);
@@ -593,6 +713,10 @@ app.post("/api/blackjack/start", (req, res) => {
             req.session.message = "Both Blackjack. Tie.";
           }
           req.session.GameOver = true;
+          updateMatchHistory(connection, req.session, (err) => {
+          if (err) return res.status(500).json({ success: false, message: "Error while saving match history" });
+          return res.status(200).json({ success: true, message: "match history successfully updated" });
+          });
           responseData = updateResponseData(req);
           return res.json(responseData);
         }
@@ -653,6 +777,10 @@ app.post("/api/blackjack/play", (req, res) => {
                         result_messages.push("Second hand: Lost.");
                     }
                     req.session.GameOver = true;
+                    updateMatchHistory(connection, req.session, (err) => {
+          if (err) return res.status(500).json({ success: false, message: "Error while saving match history" });
+          return res.status(200).json({ success: true, message: "match history successfully updated" });
+          });
                     req.session.isSplit = false;
                     req.session.message = result_messages.join(" ");
                     responseData = updateResponseData(req);
@@ -685,6 +813,10 @@ app.post("/api/blackjack/play", (req, res) => {
                         break;
                 }
                 req.session.GameOver = true;
+                updateMatchHistory(connection, req.session, (err) => {
+          if (err) return res.status(500).json({ success: false, message: "Error while saving match history" });
+          return res.status(200).json({ success: true, message: "match history successfully updated" });
+          });
                 responseData = updateResponseData(req);
             }
             break;
@@ -741,6 +873,10 @@ app.post("/api/blackjack/play", (req, res) => {
                         }
                         else result_messages.push("Second hand: Lost.");
                         req.session.GameOver = true;
+                        updateMatchHistory(connection, req.session, (err) => {
+          if (err) return res.status(500).json({ success: false, message: "Error while saving match history" });
+          return res.status(200).json({ success: true, message: "match history successfully updated" });
+          });
                         req.session.isSplit = false;
                         req.session.Split_action = false;
                         req.session.message = result_messages.join(" ");
@@ -755,6 +891,10 @@ app.post("/api/blackjack/play", (req, res) => {
                 responseData = updateResponseData(req);
                 if (req.session.player_score > 21) {
                     req.session.GameOver = true;
+                    updateMatchHistory(connection, req.session, (err) => {
+          if (err) return res.status(500).json({ success: false, message: "Error while saving match history" });
+          return res.status(200).json({ success: true, message: "match history successfully updated" });
+          });
                     req.session.message = "Out of bounds";
                     updateBalance(connection, req.session.balance, req.session.IsLogged);
                     responseData = updateResponseData(req);
@@ -776,6 +916,11 @@ app.post("/api/blackjack/play", (req, res) => {
             responseData = updateResponseData(req);
             if (req.session.player_score > 21) {
                 req.session.GameOver = true;
+                updateMatchHistory(connection, req.session, (err) => {
+          if (err) return res.status(500).json({ success: false, message: "Error while saving match history" });
+          return res.status(200).json({ success: true, message: "match history successfully updated" });
+          });
+
                 req.session.message = "You Lost! (Double bet)";
                 updateBalance(connection, req.session.balance, req.session.IsLogged);
                 responseData = updateResponseData(req);
@@ -805,6 +950,11 @@ app.post("/api/blackjack/play", (req, res) => {
                     break;
             }
             req.session.GameOver = true;
+            updateMatchHistory(connection, req.session, (err) => {
+          if (err) return res.status(500).json({ success: false, message: "Error while saving match history" });
+          return res.status(200).json({ success: true, message: "match history successfully updated" });
+          });
+req.session.double_down = false;
             responseData = updateResponseData(req);
             break;
 
