@@ -714,10 +714,6 @@ req.session.dealer_score = adjustForAces(req.session.dealer_cards, rawDealerScor
             req.session.message = "Both Blackjack. Tie.";
           }
           req.session.GameOver = true;
-          updateMatchHistory(connection, req.session, (err) => {
-          if (err) return res.status(500).json({ success: false, message: "Error while saving match history" });
-          return res.status(200).json({ success: true, message: "match history successfully updated" });
-          });
           responseData = updateResponseData(req);
           return res.json(responseData);
         }
@@ -778,10 +774,6 @@ app.post("/api/blackjack/play", (req, res) => {
                         result_messages.push("Second hand: Lost.");
                     }
                     req.session.GameOver = true;
-                    updateMatchHistory(connection, req.session, (err) => {
-          if (err) return res.status(500).json({ success: false, message: "Error while saving match history" });
-          return res.status(200).json({ success: true, message: "match history successfully updated" });
-          });
                     req.session.isSplit = false;
                     req.session.message = result_messages.join(" ");
                     responseData = updateResponseData(req);
@@ -814,10 +806,6 @@ app.post("/api/blackjack/play", (req, res) => {
                         break;
                 }
                 req.session.GameOver = true;
-                updateMatchHistory(connection, req.session, (err) => {
-          if (err) return res.status(500).json({ success: false, message: "Error while saving match history" });
-          return res.status(200).json({ success: true, message: "match history successfully updated" });
-          });
                 responseData = updateResponseData(req);
             }
             break;
@@ -876,10 +864,6 @@ app.post("/api/blackjack/play", (req, res) => {
                         }
                         else result_messages.push("Second hand: Lost.");
                         req.session.GameOver = true;
-                        updateMatchHistory(connection, req.session, (err) => {
-          if (err) return res.status(500).json({ success: false, message: "Error while saving match history" });
-          return res.status(200).json({ success: true, message: "match history successfully updated" });
-          });
                         req.session.isSplit = false;
                         req.session.Split_action = false;
                         req.session.message = result_messages.join(" ");
@@ -894,10 +878,6 @@ app.post("/api/blackjack/play", (req, res) => {
                 responseData = updateResponseData(req);
                 if (req.session.player_score > 21) {
                     req.session.GameOver = true;
-                    updateMatchHistory(connection, req.session, (err) => {
-          if (err) return res.status(500).json({ success: false, message: "Error while saving match history" });
-          return res.status(200).json({ success: true, message: "match history successfully updated" });
-          });
                     req.session.message = "Out of bounds";
                     updateBalance(connection, req.session.balance, req.session.IsLogged);
                     responseData = updateResponseData(req);
@@ -919,11 +899,6 @@ app.post("/api/blackjack/play", (req, res) => {
             responseData = updateResponseData(req);
             if (req.session.player_score > 21) {
                 req.session.GameOver = true;
-                updateMatchHistory(connection, req.session, (err) => {
-          if (err) return res.status(500).json({ success: false, message: "Error while saving match history" });
-          return res.status(200).json({ success: true, message: "match history successfully updated" });
-          });
-
                 req.session.message = "You Lost! (Double bet)";
                 updateBalance(connection, req.session.balance, req.session.IsLogged);
                 responseData = updateResponseData(req);
@@ -953,10 +928,6 @@ app.post("/api/blackjack/play", (req, res) => {
                     break;
             }
             req.session.GameOver = true;
-            updateMatchHistory(connection, req.session, (err) => {
-          if (err) return res.status(500).json({ success: false, message: "Error while saving match history" });
-          return res.status(200).json({ success: true, message: "match history successfully updated" });
-          });
 req.session.double_down = false;
             responseData = updateResponseData(req);
             break;
