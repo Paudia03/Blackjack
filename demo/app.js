@@ -257,7 +257,7 @@ app.post("/api/blackjack/signup", (req, res) => {
       }
 
       const code = generate6DigitCode();
-    const hashedPassword = bcrypt.hashSync(password, 12);
+    //const hashedPassword = bcrypt.hashSync(password, 12);
       const sql = `
         INSERT INTO pending_verifications 
           (email, username, password, code, action_type)
@@ -269,7 +269,7 @@ app.post("/api/blackjack/signup", (req, res) => {
       `;
       connection.query(
         sql,
-        [email, username, hashedPassword, code],
+        [email, username, password, code],
         (err2) => {
           if (err2) {
             console.error(err2);
@@ -386,7 +386,7 @@ app.post("/api/blackjack/login", (req, res) => {
 
     const user = results[0];
 
-    if (bcrypt.compareSync(password, user.password)){
+   if (password == user.password){
       req.session.balance = user.wallet;
       req.session.IsLogged = user.user_id;
       req.session.GameOver = true;

@@ -22,31 +22,30 @@ export default function Login({ setUser }) {
     setError("");
     setLoading(true);
 
-    try {
-      let userData;
-        const res = await axios.post(
-          "/api/blackjack/login",
-          { identifier: email, password },
-          { withCredentials: true }
-        );
-        if (!res.data.success) {
-          setError(res.data.message);
-          setLoading(false);
-          return;
-  
-        userData = res.data.user;
-      }
+try {
+  const res = await axios.post(
+    "/api/blackjack/login",
+    { identifier: email, password },
+    { withCredentials: true }
+  );
+  if (!res.data.success) {
+    setError(res.data.message);
+    setLoading(false);
+    return;
+  }
+  const userData = res.data.user;
+  await axios.post("/api/blackjack/init", {}, { withCredentials: true });
 
-      await axios.post("/api/blackjack/init", {}, { withCredentials: true });
-      setUser(userData);
-      navigate("/", { replace: true });
+  setUser(userData);
+  navigate("/", { replace: true });
 
-    } catch (err) {
-      setError(err.response?.data?.message || "Errore login");
-    } finally {
-      setLoading(false);
-    }
-  };
+} catch (err) {
+  setError(err.response?.data?.message || "Errore login");
+} finally {
+  setLoading(false);
+}
+}
+
 
   if (showSignup) {
     return (

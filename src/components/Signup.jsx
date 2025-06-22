@@ -59,32 +59,42 @@ export default function Signup({ onRegistered, onCancel }) {
 
   // Verifica OTP
   const handleVerify = async e => {
-    e.preventDefault();
-    if (!otp) {
-      setError("Inserisci il codice ricevuto");
-      return;
+  e.preventDefault();
+  if (!otp) {
+    setError("Inserisci il codice ricevuto");
+    return;
+  }
+  setError("");
+  setLoading(true);
+
+  try {
+    const res = await axios.post(
+      "/api/blackjack/authentication",
+      { email: form.email, code: otp },
+      { withCredentials: true }
+    );
+
+    if (res.data.success) {
+      onRegistered(res.data.user);
+      sessionStorage.clear();
+      setStep(3);
+    } else {
+      // Response con 200 ma success=false
+      console.warn("Verify failed (200):", res.data);
+      setError(res.data.message || "Verifica fallita");
+      setOtp("");           // pulisco il campo
     }
-    setError("");
-    setLoading(true);
-    try {
-      const res = await axios.post(
-        "/api/blackjack/authentication",
-        { email: form.email, code: otp },
-        { withCredentials: true }
-      );
-      if (res.data.success) {
-        onRegistered(res.data.user);
-        sessionStorage.clear();
-        setStep(3);
-      } else {
-        setError(res.data.message || "Verifica fallita");
-      }
-    } catch {
-      setError("Errore durante la verifica");
-    } finally {
-      setLoading(false);
-    }
-  };
+  } catch (err) {
+    // Errore HTTP (es. 401, 500, timeout...)
+    console.error("Verify error:", err.response || err);
+    const msg = err.response?.data?.message || "Errore durante la verifica";
+    setError(msg);
+    setOtp("");
+  } finally {
+    setLoading(false);
+  }
+};
+
 
   // Reinvia codice
   const handleResendOTP = async () => {
