@@ -12,12 +12,20 @@ const connection = createPool({
 
 connection.getConnection((err, conn) => {
   if (err) {
-    console.error('❌ Errore nella connessione al DB:', err.code || err.message);
+    console.error("Db error:", err.code || err.message);
     process.exit(1);
   } else {
-    console.log('✅ Connessione al DB riuscita!');
+    console.log('successful db connection!');
     conn.release();
   }
+});
+
+connection.query("TRUNCATE TABLE sessions;", (err) => {
+    if (err) {
+        console.error("Failed to clear sessions table:", err);
+    } else {
+        console.log("Sessions table cleared on server startup.");
+    }
 });
 
 export default connection;
