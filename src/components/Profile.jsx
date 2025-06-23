@@ -1,17 +1,54 @@
-import React, { useState } from "react";
+import React, { useState, useEffect} from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  CartesianGrid,
+} from "recharts";
 
 export default function Profile({ user, setUser }) {
   const navigate = useNavigate();
+  useEffect(() => {
+  const fetchUser = async () => {
+    try {
+      const res = await axios.get("/api/blackjack/me", { withCredentials: true });
+      if (res.data.success && res.data.user) {
+        setUser(res.data.user);
+      }
+    } catch (err) {
+      console.error("Errore caricamento profilo:", err);
+    }
+  };
 
-  // Numero di bilancio
+  fetchUser();
+}, []);
+
+
+  // Gestione caricamento e fallback
+  if (!user || typeof user.balance === "undefined") {
+    return (
+      <div className="min-h-screen flex items-center justify-center text-white">
+        Caricamento profilo...
+      </div>
+    );
+  }
+
   const balanceNum =
     typeof user.balance === "string"
       ? parseFloat(user.balance) || 0
       : typeof user.balance === "number"
       ? user.balance
       : 0;
+
+  const totalNet = user.total_net_result ?? 0;
+  const gamesPlayed = user.games_played ?? 0;
+  const gamesWon = user.games_won ?? 0;
+  const totalBet = user.total_bet_amount ?? 0;
 
   const [amount, setAmount] = useState("");
   const [message, setMessage] = useState("");
@@ -24,12 +61,19 @@ export default function Profile({ user, setUser }) {
       return;
     }
     try {
-      const url = type === "deposit" ? "/api/blackjack/deposit" : "/api/blackjack/withdraw";
+      const url =
+        type === "deposit"
+          ? "/api/blackjack/deposit"
+          : "/api/blackjack/withdraw";
       const payload = type === "deposit" ? { deposit: val } : { withdraw: val };
       const res = await axios.post(url, payload, { withCredentials: true });
       const newBal = res.data.balance;
       setUser({ ...user, balance: newBal });
-      setMessage(type === "deposit" ? `+€${val.toFixed(2)}` : `-€${val.toFixed(2)}`);
+      setMessage(
+        type === "deposit"
+          ? `+€${val.toFixed(2)}`
+          : `-€${val.toFixed(2)}`
+      );
       setAmount("");
       setTimeout(() => setMessage(""), 3000);
     } catch (err) {
@@ -39,8 +83,8 @@ export default function Profile({ user, setUser }) {
 
   const tabs = [
     { id: "profile", label: "Profilo" },
-    { id: "history", label: "Storico" },
-    { id: "finances", label: "Finanze" }
+    { id: "history", label: "Statistiche" },
+    { id: "finances", label: "Finanze" },
   ];
 
   return (
@@ -48,7 +92,7 @@ export default function Profile({ user, setUser }) {
       <div className="max-w-5xl mx-auto bg-gray-900 rounded-3xl shadow-2xl overflow-hidden">
         {/* Tabs */}
         <div className="flex bg-gray-800">
-          {tabs.map(tab => (
+          {tabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
@@ -67,11 +111,27 @@ export default function Profile({ user, setUser }) {
           {activeTab === "profile" && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               <div className="space-y-4">
-                <h2 className="text-3xl font-bold text-white">Benvenuto, {user.username}</h2>
-                <p className="text-gray-300">Gestisci il tuo profilo e il tuo saldo.</p>
+                <h2 className="text-3xl font-bold text-white">
+                  Benvenuto, {user.username}
+                </h2>
+                <p className="text-gray-300">
+                  Gestisci il tuo profilo e il tuo saldo.
+                </p>
                 <div className="bg-gray-800 p-6 rounded-2xl shadow-inner">
                   <p className="text-gray-400">Saldo Disponibile</p>
-                  <p className="text-4xl font-bold text-green-400 mt-2">€{balanceNum.toFixed(2)}</p>
+                  <p className="text-4xl font-bold text-green-400 mt-2">
+                    €{balanceNum.toFixed(2)}
+                  </p>
+                  <p className="text-gray-400 mt-2">
+                    Guadagno Netto:{" "}
+                    <span
+                      className={`font-semibold ${
+                        totalNet >= 0 ? "text-green-400" : "text-red-400"
+                      }`}
+                    >
+                      €{totalNet.toFixed(2)}
+                    </span>
+                  </p>
                 </div>
                 <div className="mt-4">
                   <label className="block text-gray-300 mb-2">Importo</label>
@@ -96,20 +156,33 @@ export default function Profile({ user, setUser }) {
                       -
                     </button>
                   </div>
-                  {message && <p className="text-yellow-400 mt-2 animate-pulse">{message}</p>}
+                  {message && (
+                    <p className="text-yellow-400 mt-2 animate-pulse">
+                      {message}
+                    </p>
+                  )}
                 </div>
                 <button
-                 onClick={() => navigate('/change-password')}
+                  onClick={() => navigate("/change-password")}
                   className="mt-8 w-full bg-blue-600 py-3 rounded-full text-white font-semibold hover:bg-blue-700 transition"
                 >
                   Cambia Password
                 </button>
               </div>
-              {/* Decorative placeholder instead of image */}
               <div className="flex items-center justify-center p-6 bg-gradient-to-tr from-purple-700 to-blue-500 rounded-2xl shadow-lg">
                 <div className="text-center">
-                  <svg className="w-20 h-20 text-white mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5.121 17.804A3 3 0 017 16h10a3 3 0 011.879.804M12 12a5 5 0 100-10 5 5 0 000 10z" />
+                  <svg
+                    className="w-20 h-20 text-white mb-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M5.121 17.804A3 3 0 017 16h10a3 3 0 011.879.804M12 12a5 5 0 100-10 5 5 0 000 10z"
+                    />
                   </svg>
                   <p className="text-white font-semibold">Il tuo spazio personale</p>
                 </div>
@@ -119,24 +192,56 @@ export default function Profile({ user, setUser }) {
 
           {activeTab === "history" && (
             <div>
-              <h2 className="text-2xl font-bold text-white mb-4">Storico Partite</h2>
-              <div className="h-64 bg-gray-800 rounded-2xl flex items-center justify-center text-gray-500">
-                {/* Grafico storico futuro */}
-                Coming Soon: Grafico Partite
+              <h2 className="text-2xl font-bold text-white mb-4">
+                Statistiche Partite
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-gray-800 p-6 rounded-2xl text-center">
+                  <p className="text-white text-lg font-semibold">
+                    Partite Giocate
+                  </p>
+                  <p className="text-blue-400 text-4xl mt-2">{gamesPlayed}</p>
+                </div>
+                <div className="bg-gray-800 p-6 rounded-2xl text-center">
+                  <p className="text-white text-lg font-semibold">
+                    Partite Vinte
+                  </p>
+                  <p className="text-green-400 text-4xl mt-2">{gamesWon}</p>
+                </div>
+                <div className="bg-gray-800 p-6 rounded-2xl text-center md:col-span-2">
+                  <p className="text-white text-lg font-semibold">
+                    Percentuale Vittorie
+                  </p>
+                  <p className="text-yellow-400 text-3xl mt-2 font-bold">
+                    {gamesPlayed > 0
+                      ? ((gamesWon / gamesPlayed) * 100).toFixed(1) + "%"
+                      : "0%"}
+                  </p>
+                </div>
               </div>
             </div>
           )}
 
           {activeTab === "finances" && (
             <div>
-              <h2 className="text-2xl font-bold text-white mb-4">Entrate & Uscite</h2>
-              <div className="h-64 grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="bg-gray-800 rounded-2xl p-4 flex items-center justify-center text-gray-500">
-                  Grafico Entrate
-                </div>
-                <div className="bg-gray-800 rounded-2xl p-4 flex items-center justify-center text-gray-500">
-                  Grafico Uscite
-                </div>
+              <h2 className="text-2xl font-bold text-white mb-4">
+                Finanze Complessive
+              </h2>
+              <div className="bg-gray-800 p-4 rounded-2xl">
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart
+                    data={[
+                      { name: "Totale Puntato", value: totalBet },
+                      { name: "Guadagno Netto", value: totalNet },
+                    ]}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" stroke="#ccc" />
+                    <YAxis stroke="#ccc" />
+                    <Tooltip />
+                    <Bar dataKey="value" fill="#60a5fa" />
+                  </BarChart>
+                </ResponsiveContainer>
               </div>
             </div>
           )}
